@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400;
+  src: local(''), url('./assets/fonts/nunito-v16-latin-regular.woff2') format('woff2');
+}
+
+:root {
+  --bg: #091224;
+  --surface: #111d33;
+  --surface-soft: #172743;
+  --text: #f2f5f9;
+  --muted: #9eb0c8;
+  --primary: #28a0f0;
+  --primary-soft: rgba(40, 160, 240, 0.15);
+  --danger: #f25757;
+  --danger-soft: rgba(242, 87, 87, 0.14);
+  --success: #2fb875;
+  --success-soft: rgba(47, 184, 117, 0.16);
+  --border: rgba(158, 176, 200, 0.22);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+#app {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Nunito', 'Avenir Next', 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(1000px circle at -10% -20%, rgba(40, 160, 240, 0.22), transparent 55%),
+    radial-gradient(900px circle at 110% -10%, rgba(47, 184, 117, 0.16), transparent 45%),
+    var(--bg);
+  color: var(--text);
+}
+
+code {
+  color: #7fd3ff;
+}

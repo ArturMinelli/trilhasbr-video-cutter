@@ -1,0 +1,118 @@
+#!/bin/bash
+# One fake for every external tool install.sh calls. It is symlinked into a sandbox bin dir under each tool's
+# name (brew, curl, sudo, softwareupdate, ...) and behaves according to FAKE_* env vars set by run-stubbed.sh.
+# Every call is appended to $STUB_LOG ("<tool> <args>") so scenarios can assert on exactly what ran.
+name="$(basename "$0")"
+log() { printf '%s\n' "$*" >> "$STUB_LOG"; }
+log "$name $*"
+# second log with the env that matters, one line per call: "<tool> <args> | VAR=value ..."
+printf '%s %s | GOTOOLCHAIN=%s HOMEBREW_NO_INSTALL_UPGRADE=%s HOMEBREW_NO_AUTO_UPDATE=%s HOMEBREW_NO_ENV_HINTS=%s\n' \
+  "$name" "$*" "${GOTOOLCHAIN:-}" "${HOMEBREW_NO_INSTALL_UPGRADE:-}" "${HOMEBREW_NO_AUTO_UPDATE:-}" "${HOMEBREW_NO_ENV_HINTS:-}" >> "$STUB_LOG.env"
+
+
+case "$name" in
+  uname)
+    case "${1:-}" in
+      -s) echo "${FAKE_UNAME_S:-Darwin}" ;;
+      -m) echo "${FAKE_UNAME_M:-arm64}" ;;
+      *) exec /usr/bin/uname "$@" ;;
+    esac ;;
+  sysctl)
+    if [ "${2:-}" = hw.optional.arm64 ]; then echo "${FAKE_ARM64:-1}"; else exec /usr/sbin/sysctl "$@"; fi ;;
+  sw_vers) echo "${FAKE_MACOS:-15.2}" ;;
+  id) if [ "${1:-}" = -u ]; then echo "${FAKE_UID:-501}"; else exec /usr/bin/id "$@"; fi ;;
+  sleep) case "${1:-}" in 0.*) exec /bin/sleep "$@" ;; esac ;; # short waits are real, retry back-offs are skipped
+  arch) # arch -arm64 CMD...: the re-exec from a Rosetta shell; the new process is a native one
+    shift; FAKE_UNAME_M=arm64 exec "$@" ;;
+  sudo)
+    case "$*" in
+      "-n true") exit "${FAKE_SUDO_N:-0}" ;;
+      "-v") exit "${FAKE_SUDO_V:-0}" ;;
+      *) exec "$@" ;;
+    esac ;;
+  xcode-select)
+    case "${1:-}" in
+      -p) if [ "${FAKE_CLT:-1}" = 1 ] || [ -f "$STUB_STATE/clt" ]; then echo /Library/Developer/CommandLineTools; else
+            echo "xcode-select: error: unable to get active developer directory, use \`sudo xcode-select --switch path/to/Xcode.app\` to set one (or see \`man xcode-select\`)" >&2; exit 2; fi ;;
+      *) exit 0 ;;
+    esac ;;
+  softwareupdate)
+    case "${1:-}" in
+      -l)
+        if [ -f /tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress-file ]; then log "softwareupdate: placeholder=present"; else log "softwareupdate: placeholder=absent"; fi
+        cat "$STUB_HOME/fixtures/${FAKE_SU_FIXTURE:-softwareupdate-none.txt}" ;;
+      -i) mkdir -p "$STUB_STATE"; : > "$STUB_STATE/clt"; echo "Installing $2"; echo "Done with $2" ;;
+    esac ;;
+  clang) echo "Apple clang version 16.0.0 (clang-1600.0.26.6)"; echo "Target: arm64-apple-darwin24.2.0" ;;
+  curl)
+    out=""; url=""; prev=""
+    for a in "$@"; do
+      [ "$prev" = -o ] && out="$a"
+      prev="$a"; url="$a"
+    done
+    case "$url" in
+      https://github.com) [ "${FAKE_NET:-1}" = 1 ] || exit 6 ;;
+      *Homebrew/install/HEAD/install.sh)
+        [ "${FAKE_NET:-1}" = 1 ] || exit 6
+        cat > "$out" <<INSTALLER
+#!/bin/bash
+echo "homebrew-installer NONINTERACTIVE=\${NONINTERACTIVE:-} uid=\$(id -u)" >> "$STUB_LOG"
+mkdir -p "$FAKE_PREFIX/bin"
+ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/brew"
+INSTALLER
+        ;;
+      *onnxruntime-osx-arm64-*.tgz)
+        [ "${FAKE_NET:-1}" = 1 ] || exit 6
+        cp "$FAKE_ORT_TGZ" "$out" ;;
+      *person-yolo11n.onnx | *osnet_x1_0_msmt17.onnx)
+        [ "${FAKE_NET:-1}" = 1 ] || exit 6
+        cp "$FAKE_MODEL_DIR/$(basename "$url")" "$out" ;;
+      *) log "curl: unexpected url $url"; exit 22 ;;
+    esac ;;
+  brew)
+    case "${1:-}" in
+      shellenv) # shellcheck disable=SC2016 # ${PATH} must stay literal: the caller's shell expands it
+                printf 'export HOMEBREW_PREFIX="%s"\nexport PATH="%s/bin:${PATH}"\n' "$FAKE_PREFIX" "$FAKE_PREFIX" ;;
+      --version) echo "Homebrew 4.4.12" ;;
+      --prefix) if [ -n "${2:-}" ]; then echo "$FAKE_PREFIX/opt/$2"; else echo "$FAKE_PREFIX"; fi ;;
+      list) # brew list --formula --versions NAME: FAKE_KEGS is the space-separated list of installed formulae
+        case " ${FAKE_KEGS:-} " in
+          *" ${4:-} "*) echo "${4:-} ${FAKE_KEG_VERSION:-1.0.0}" ;;
+          *) echo "Error: No such keg: $FAKE_PREFIX/Cellar/${4:-}" >&2; exit 1 ;;
+        esac ;;
+      outdated) for f in ${FAKE_OUTDATED:-}; do echo "$f"; done ;;
+      upgrade) ;;
+      install)
+        shift
+        for f in "$@"; do
+          mkdir -p "$FAKE_PREFIX/bin"
+          case "$f" in
+            go) ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/go" ;;
+            node) ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/node"; ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/npm" ;;
+            ffmpeg) ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/ffmpeg"; ln -sf "$STUB_HOME/stub" "$FAKE_PREFIX/bin/ffprobe" ;;
+          esac
+        done ;;
+    esac ;;
+  go)
+    case "${1:-}" in
+      version) # like the real go command: GOTOOLCHAIN=goX.Y.Z switches to that toolchain, local/unset keeps the installed one
+        v="${FAKE_GO_VERSION:-1.25.6}"
+        case "${GOTOOLCHAIN:-}" in go[0-9]*) v="${GOTOOLCHAIN#go}" ;; esac
+        echo "go version go$v darwin/arm64" ;;
+      env) echo "$STUB_GOPATH" ;;
+      install) mkdir -p "$STUB_GOPATH/bin"; ln -sf "$STUB_HOME/stub" "$STUB_GOPATH/bin/wails" ;;
+    esac ;;
+  node) case "${1:-}" in -p) echo "${FAKE_NODE_MAJOR:-22}" ;; -v) echo "v${FAKE_NODE_MAJOR:-22}.11.0" ;; esac ;;
+  npm) case "${1:-}" in -v) echo "10.9.0" ;; esac ;;
+  ffmpeg) echo "ffmpeg version 7.1 Copyright (c) 2000-2024 the FFmpeg developers" ;;
+  ffprobe) echo "ffprobe version 7.1 Copyright (c) 2007-2024 the FFmpeg developers" ;;
+  wails)
+    case "${1:-}" in
+      version) echo "${FAKE_WAILS_VERSION:-v2.11.0}" ;;
+      doctor) cat "$STUB_HOME/fixtures/${FAKE_DOCTOR_FIXTURE:-wails-doctor-ready.txt}" ;;
+      build) mkdir -p build/bin/trilhasbr-video-cutter.app/Contents/MacOS build/bin/trilhasbr-video-cutter.app/Contents/Resources
+             : > build/bin/trilhasbr-video-cutter.app/Contents/MacOS/trilhasbr-video-cutter ;;
+    esac ;;
+  codesign) exit 0 ;;
+  *) echo "stub: no behavior defined for $name" >&2; exit 99 ;;
+esac

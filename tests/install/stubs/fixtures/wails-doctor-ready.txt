@@ -1,0 +1,30 @@
+
+Wails CLI v2.11.0
+
+
+Scanning system - Please wait (this may take a long time)...Done.
+
+# System
+
+OS           | MacOS
+Version      | 15.2
+ID           | 24C101
+Go Version   | go1.25.6
+Platform     | darwin
+Architecture | arm64
+
+# Dependencies
+
+Dependency               | Package Name | Status    | Version
+*Xcode command line tools | N/A          | Installed | 2409
+Nodejs                   | N/A          | Installed | 22.11.0
+npm                      | N/A          | Installed | 10.9.0
+*upx                     | N/A          | Available |
+*nsis                    | N/A          | Available |
+
+# Diagnosis
+
+Your system is ready for Wails development!
+
+Optional package(s) installation details:
+  - upx : Available at https://upx.github.io/

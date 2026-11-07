@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "trilhasbr-video-cutter",
+  "outputfilename": "trilhasbr-video-cutter",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Artur Peixoto",
+    "email": "94147899+ArturMinelli@users.noreply.github.com"
+  }
+}

@@ -1,0 +1,6 @@
+# Diagnosis
+
+Required package(s) installation details:
+  - Xcode command line tools : Run 'xcode-select --install'
+
+SUCCESS  Your system has missing dependencies!

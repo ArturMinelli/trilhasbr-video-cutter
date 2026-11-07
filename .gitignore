@@ -1,0 +1,18 @@
+build/bin
+node_modules
+frontend/dist
+
+.DS_Store
+
+# ONNX Runtime native libs are fetched by scripts/fetch-onnxruntime.sh
+resources/onnxruntime/*/*.dylib
+resources/onnxruntime/*/*.so
+resources/onnxruntime/*/*.dll
+
+# install.sh log
+install.log
+# Detection models: downloaded from the GitHub release by scripts/fetch-models.sh (manifest.json is committed)
+resources/models/*.onnx
+
+# Local databases
+*.sqlite

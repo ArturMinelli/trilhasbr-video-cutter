@@ -1,0 +1,33 @@
+TrilhasBR Video Cutter
+Copyright (C) 2026 Artur Peixoto
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+Detection models
+----------------
+The two ONNX models the application downloads and runs are separate works with their own terms. They are
+published as assets of the GitHub release "models-v1", not committed to this repository.
+
+  person-yolo11n.onnx
+    Ultralytics YOLO11n (stock COCO checkpoint, exported to ONNX at 1280 px). Copyright holder as named in the
+    file's own metadata: Ultralytics. License: GNU AGPL-3.0 (https://ultralytics.com/license). Ultralytics also
+    offers an Enterprise license for use that does not comply with the AGPL.
+
+  osnet_x1_0_msmt17.onnx
+    OSNet x1.0 person re-identification weights in the torchreid model-zoo family (torchreid code: MIT,
+    https://github.com/KaiyangZhou/deep-person-reid), trained on the MSMT17 dataset. Research use: the MSMT17
+    dataset terms could not be confirmed and the exact checkpoint is not independently confirmed. Check them
+    before any commercial use.
+
+See MODELS.md for provenance and checksums, and THIRD_PARTY_LICENSES.md for every other component.

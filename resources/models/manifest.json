@@ -1,0 +1,12 @@
+{
+  "person-yolo11n.onnx": {
+    "sha256": "2c182881cc3d21614381e7c7b6d58feb1c6e49a509d14a67c6c5e2a34c62ee99",
+    "input_shape": [1, 3, 1280, 1280],
+    "output_shape": [1, 84, 33600]
+  },
+  "osnet_x1_0_msmt17.onnx": {
+    "sha256": "bad3a75234470f592b4c2b0a228b451347bba84e6181a6af7c5f93c4497cd564",
+    "input_shape": ["b", 3, 256, 128],
+    "output_shape": ["b", 512]
+  }
+}
