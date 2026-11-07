@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"encoding/json"
 	"math"
 	"sort"
 	"strings"
@@ -229,7 +230,7 @@ func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilt
 		size = 50
 	}
 
-	const base = `
+	base := `
 		SELECT g.id AS id,
 		       COALESCE(g.label, '') AS label,
 		       SUM(t.end_sec - t.start_sec) AS dur,
@@ -237,17 +238,26 @@ func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilt
 		FROM person_groups g
 		JOIN person_group_tracks gt ON gt.group_id = g.id
 		JOIN tracks t ON t.id = gt.track_id AND t.removed = 0
-		WHERE g.workspace_id = ?
-		GROUP BY g.id
-		HAVING dur >= ? AND conf >= ?`
+		WHERE g.workspace_id = ?`
+	args := []any{f.WorkspaceID}
+	if len(f.GroupIDs) > 0 {
+		ids, err := json.Marshal(f.GroupIDs)
+		if err != nil {
+			return nil, 0, dbErr("failed to encode group ids", err)
+		}
+		base += ` AND g.id IN (SELECT value FROM json_each(?))`
+		args = append(args, string(ids))
+	}
+	base += ` GROUP BY g.id HAVING dur >= ? AND conf >= ?`
+	args = append(args, f.MinDurationSec, f.MinConfidence)
 
 	var total int
-	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+base+`)`, f.WorkspaceID, f.MinDurationSec, f.MinConfidence).Scan(&total); err != nil {
+	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+base+`)`, args...).Scan(&total); err != nil {
 		return nil, 0, dbErr("failed to count groups", err)
 	}
 
 	rows, err := r.db.QueryContext(ctx, base+` ORDER BY g.id LIMIT ? OFFSET ?`,
-		f.WorkspaceID, f.MinDurationSec, f.MinConfidence, size, (page-1)*size)
+		append(args, size, (page-1)*size)...)
 	if err != nil {
 		return nil, 0, dbErr("failed to list groups", err)
 	}
@@ -273,14 +283,18 @@ func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilt
 		return []domain.PersonGroup{}, total, nil
 	}
 
+	groupIDs, err := json.Marshal(ids)
+	if err != nil {
+		return nil, 0, dbErr("failed to encode group ids", err)
+	}
 	trows, err := r.db.QueryContext(ctx,
 		`SELECT gt.group_id, t.id, t.video_id, v.name, t.start_sec, t.end_sec, t.avg_confidence, t.detection_count,
-		        t.best_bbox, t.thumbnail_path, t.embedding
+		        t.best_bbox, t.thumbnail_path
 		 FROM person_group_tracks gt
 		 JOIN tracks t ON t.id = gt.track_id AND t.removed = 0
 		 JOIN videos v ON v.id = t.video_id
-		 WHERE gt.group_id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)
-		 ORDER BY t.start_sec, t.id`, ids...)
+		 WHERE gt.group_id IN (SELECT value FROM json_each(?))
+		 ORDER BY t.start_sec, t.id`, string(groupIDs))
 	if err != nil {
 		return nil, 0, dbErr("failed to list group tracks", err)
 	}
@@ -289,12 +303,10 @@ func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilt
 	for trows.Next() {
 		var gid int64
 		var t domain.Track
-		var emb []byte
 		if err = trows.Scan(&gid, &t.ID, &t.VideoID, &t.VideoName, &t.StartSec, &t.EndSec, &t.AvgConfidence,
-			&t.DetectionCount, &t.BestBBox, &t.ThumbnailPath, &emb); err != nil {
+			&t.DetectionCount, &t.BestBBox, &t.ThumbnailPath); err != nil {
 			return nil, 0, dbErr("failed to scan track", err)
 		}
-		t.Embedding = decodeEmbedding(emb)
 		i := index[gid]
 		groups[i].Tracks = append(groups[i].Tracks, t)
 		if videos[gid] == nil {

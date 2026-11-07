@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 import type { FolderNode } from './model'
 
 type FolderTreeProps = {
@@ -6,7 +8,7 @@ type FolderTreeProps = {
   onSelect: (folderPath: string) => void
 }
 
-const FolderRow = ({
+const FolderRow = memo(function FolderRow({
   node,
   depth,
   selectedPath,
@@ -16,7 +18,7 @@ const FolderRow = ({
   depth: number
   selectedPath: string
   onSelect: (folderPath: string) => void
-}) => {
+}) {
   const isRoot = node.path === ''
   const label = isRoot ? 'Root' : node.name
   const isSelected = selectedPath === node.path
@@ -46,7 +48,7 @@ const FolderRow = ({
       ) : null}
     </li>
   )
-}
+})
 
 export const FolderTree = ({ root, selectedPath, onSelect }: FolderTreeProps) => {
   return (

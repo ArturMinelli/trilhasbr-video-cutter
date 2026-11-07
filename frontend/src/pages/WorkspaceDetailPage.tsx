@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
@@ -22,6 +23,34 @@ import { Button } from '../shared/ui/Button'
 
 const isShiftableVideo = (video: VideoExplorer): boolean => Boolean(video.startedAt && video.finishedAt)
 
+type WorkspaceDetectionControlsProps = {
+  workspaceId: number
+  progressHost: HTMLDivElement | null
+  onDetectingChange: (detecting: boolean) => void
+  onSettled: () => void
+}
+
+const WorkspaceDetectionControls = ({
+  workspaceId,
+  progressHost,
+  onDetectingChange,
+  onSettled,
+}: WorkspaceDetectionControlsProps) => {
+  const detection = useDetection(workspaceId, onSettled)
+  const isDetecting = detection.state.status === 'starting' || detection.state.status === 'running'
+
+  useEffect(() => {
+    onDetectingChange(isDetecting)
+  }, [isDetecting, onDetectingChange])
+
+  return (
+    <>
+      <DetectButton detection={detection} />
+      {progressHost ? createPortal(<DetectProgress detection={detection} />, progressHost) : null}
+    </>
+  )
+}
+
 export const WorkspaceDetailPage = () => {
   const backend = useBackend()
   const queryClient = useQueryClient()
@@ -38,6 +67,8 @@ export const WorkspaceDetailPage = () => {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [csvPreview, setCSVPreview] = useState<PreviewCutsFromCSVResponse | null>(null)
   const [view, setView] = useState<'videos' | 'people'>('videos')
+  const [isDetecting, setIsDetecting] = useState(false)
+  const [progressHost, setProgressHost] = useState<HTMLDivElement | null>(null)
   const [currentFolderPath, setCurrentFolderPath] = useState('')
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
   const selectAllRef = useRef<HTMLInputElement | null>(null)
@@ -47,6 +78,7 @@ export const WorkspaceDetailPage = () => {
   const workspacesQuery = useQuery({
     queryKey: ['workspaces'],
     queryFn: () => backend.listWorkspaces(),
+    staleTime: 30_000,
   })
 
   const workspace = useMemo(
@@ -58,11 +90,16 @@ export const WorkspaceDetailPage = () => {
     queryKey: ['workspace-explorer', workspaceId],
     queryFn: () => backend.getWorkspaceExplorer(workspaceId),
     enabled: isWorkspaceIdValid,
+    staleTime: 30_000,
   })
 
-  const detection = useDetection(workspaceId, () => {
+  const onDetectionSettled = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['people', workspaceId] })
-  })
+  }, [queryClient, workspaceId])
+
+  const handleDetectingChange = useCallback((detecting: boolean) => {
+    setIsDetecting(detecting)
+  }, [])
 
   const loadPreview = useCallback(
     (videoId: number) => {
@@ -71,7 +108,8 @@ export const WorkspaceDetailPage = () => {
     [backend],
   )
 
-  const model = useMemo(() => buildExplorerModel(explorerQuery.data?.videos ?? []), [explorerQuery.data?.videos])
+  const deferredExplorerVideos = useDeferredValue(explorerQuery.data?.videos)
+  const model = useMemo(() => buildExplorerModel(deferredExplorerVideos ?? []), [deferredExplorerVideos])
   const childFolders = useMemo(() => model.folderChildrenByDir.get(currentFolderPath) ?? [], [model, currentFolderPath])
   const videosInCurrentFolder = useMemo(() => model.videosByDir.get(currentFolderPath) ?? [], [model, currentFolderPath])
   const shiftableVideosInCurrentFolder = useMemo(
@@ -385,7 +423,6 @@ export const WorkspaceDetailPage = () => {
     )
   }
 
-  const isDetecting = detection.state.status === 'starting' || detection.state.status === 'running'
   const breadcrumbSegments = splitFolderPath(currentFolderPath)
   const breadcrumbParts = ['Root', ...breadcrumbSegments]
 
@@ -400,8 +437,13 @@ export const WorkspaceDetailPage = () => {
           <p className="text-sm text-[var(--muted)]">{workspace?.directory ?? explorerQuery.data?.workspaceDirectory ?? ''}</p>
         </div>
 
-        <div className="flex items-start gap-2">
-          <DetectButton detection={detection} />
+        <div className="flex flex-wrap items-start gap-2">
+          <WorkspaceDetectionControls
+            workspaceId={workspaceId}
+            progressHost={progressHost}
+            onDetectingChange={handleDetectingChange}
+            onSettled={onDetectionSettled}
+          />
           <RefreshWorkspaceButton workspaceId={workspaceId} disabled={isDetecting} />
           <Button variant="secondary" onClick={() => setIsDeleteOpen(true)} disabled={isDetecting}>
             Delete
@@ -416,7 +458,7 @@ export const WorkspaceDetailPage = () => {
         </div>
       </header>
 
-      <DetectProgress detection={detection} />
+      <div ref={setProgressHost} />
 
       <div className="mb-4 flex gap-2" role="tablist">
         {(['videos', 'people'] as const).map((tab) => (
@@ -431,8 +473,9 @@ export const WorkspaceDetailPage = () => {
 
       {view === 'people' ? <PeopleGallery workspaceId={workspaceId} onCutStarted={watchCutJob} /> : null}
 
-      <div className={`grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] ${view === 'people' ? 'hidden' : ''}`}>
-        <aside>
+      {view === 'videos' ? (
+        <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
           <FolderTree root={model.root} selectedPath={currentFolderPath} onSelect={setCurrentFolderPath} />
         </aside>
 
@@ -505,7 +548,7 @@ export const WorkspaceDetailPage = () => {
                     loadPreview={loadPreview}
                     selected={selectedVideoIds.has(video.id)}
                     selectionDisabled={!isShiftableVideo(video)}
-                    onSelectionChange={(checked) => toggleVideoSelection(video.id, checked)}
+                    onSelectionChange={toggleVideoSelection}
                   />
                 ))}
               </div>
@@ -519,6 +562,7 @@ export const WorkspaceDetailPage = () => {
           ) : null}
         </section>
       </div>
+      ) : null}
 
       <CutModal
         open={isModalOpen}
@@ -555,13 +599,15 @@ export const WorkspaceDetailPage = () => {
         onDeleted={() => navigate('/')}
       />
 
-      <ShiftTimeModal
-        open={isShiftModalOpen}
-        videos={selectedVideos}
-        submitting={shiftVideosMutation.isPending}
-        onClose={() => setIsShiftModalOpen(false)}
-        onSubmit={(input) => shiftVideosMutation.mutate(input)}
-      />
+      {isShiftModalOpen ? (
+        <ShiftTimeModal
+          open={isShiftModalOpen}
+          videos={selectedVideos}
+          submitting={shiftVideosMutation.isPending}
+          onClose={() => setIsShiftModalOpen(false)}
+          onSubmit={(input) => shiftVideosMutation.mutate(input)}
+        />
+      ) : null}
     </div>
   )
 }

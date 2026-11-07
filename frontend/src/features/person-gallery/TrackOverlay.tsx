@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import { personName } from '../../entities/person/model'
 import type { TrackBoxRow, VideoTrackBoxesDTO } from '../../infrastructure/backend/types'
@@ -59,13 +59,44 @@ type FrameCallbackVideo = HTMLVideoElement & {
   cancelVideoFrameCallback?: (handle: number) => void
 }
 
+type LabelMetric = { text: string; width: number }
+
 // Canvas drawn over the <video>. Boxes are normalized to the frame, so we map them into the
 // rect the video actually occupies inside the element (object-fit: contain letterboxes it).
 export const TrackOverlay = ({ video, tracks, sampleFps, highlightTrackIds, highlightLabel }: Props) => {
+  const ordered = useMemo(
+    () => [...tracks].sort((a, b) => Number(highlightTrackIds.has(a.trackId)) - Number(highlightTrackIds.has(b.trackId))),
+    [tracks, highlightTrackIds],
+  )
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const dataRef = useRef({ tracks, sampleFps, highlightTrackIds, highlightLabel })
-  dataRef.current = { tracks, sampleFps, highlightTrackIds, highlightLabel }
+  const dataRef = useRef({ ordered, sampleFps, highlightTrackIds, highlightLabel })
+  dataRef.current = { ordered, sampleFps, highlightTrackIds, highlightLabel }
   const redrawRef = useRef<() => void>()
+  const labelsRef = useRef<Map<number, LabelMetric>>(new Map())
+  const labelsKeyRef = useRef('')
+
+  useEffect(() => {
+    const key = `${highlightLabel}\0${[...highlightTrackIds].sort((a, b) => a - b).join(',')}\0${ordered
+      .map((track) => `${track.trackId}:${track.label ?? ''}:${track.groupId}`)
+      .join('\0')}`
+    if (key === labelsKeyRef.current) {
+      return
+    }
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!context) {
+      return
+    }
+    context.font = '600 12px system-ui, sans-serif'
+    const next = new Map<number, LabelMetric>()
+    for (const track of ordered) {
+      const highlighted = highlightTrackIds.has(track.trackId)
+      const text = highlighted ? highlightLabel : personName(track.label, track.groupId)
+      next.set(track.trackId, { text, width: context.measureText(text).width + 8 })
+    }
+    labelsRef.current = next
+    labelsKeyRef.current = key
+  }, [ordered, highlightLabel, highlightTrackIds])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -74,24 +105,60 @@ export const TrackOverlay = ({ video, tracks, sampleFps, highlightTrackIds, high
       return undefined
     }
 
-    const draw = () => {
+    const styles = getComputedStyle(canvas)
+    const primary = styles.getPropertyValue('--primary').trim() || '#28a0f0'
+    const muted = styles.getPropertyValue('--muted').trim() || '#9eb0c8'
+
+    let layoutLeft = -1
+    let layoutTop = -1
+    let layoutWidth = -1
+    let layoutHeight = -1
+    let layoutDpr = -1
+
+    const syncCanvasLayout = () => {
+      const left = video.offsetLeft
+      const top = video.offsetTop
       const width = video.clientWidth
       const height = video.clientHeight
       const dpr = window.devicePixelRatio || 1
-      // Track the <video> element's box exactly (wrapper margins/padding can't skew the mapping).
-      canvas.style.left = `${video.offsetLeft}px`
-      canvas.style.top = `${video.offsetTop}px`
+      if (
+        left === layoutLeft &&
+        top === layoutTop &&
+        width === layoutWidth &&
+        height === layoutHeight &&
+        dpr === layoutDpr
+      ) {
+        return
+      }
+      layoutLeft = left
+      layoutTop = top
+      layoutWidth = width
+      layoutHeight = height
+      layoutDpr = dpr
+      canvas.style.left = `${left}px`
+      canvas.style.top = `${top}px`
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
-      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
-        canvas.width = Math.round(width * dpr)
-        canvas.height = Math.round(height * dpr)
+      const bitmapWidth = Math.round(width * dpr)
+      const bitmapHeight = Math.round(height * dpr)
+      if (canvas.width !== bitmapWidth || canvas.height !== bitmapHeight) {
+        canvas.width = bitmapWidth
+        canvas.height = bitmapHeight
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    const draw = () => {
+      syncCanvasLayout()
+      const width = layoutWidth
+      const height = layoutHeight
+      if (width <= 0 || height <= 0) {
+        return
+      }
       ctx.clearRect(0, 0, width, height)
 
       const { videoWidth, videoHeight } = video
-      if (!videoWidth || !videoHeight || !width || !height) {
+      if (!videoWidth || !videoHeight) {
         return
       }
       const scale = Math.min(width / videoWidth, height / videoHeight)
@@ -102,19 +169,16 @@ export const TrackOverlay = ({ video, tracks, sampleFps, highlightTrackIds, high
 
       const data = dataRef.current
       const maxGapSec = MAX_GAP_INTERVALS / (data.sampleFps > 0 ? data.sampleFps : DEFAULT_FPS)
-      const styles = getComputedStyle(canvas)
-      const primary = styles.getPropertyValue('--primary').trim() || '#28a0f0'
-      const muted = styles.getPropertyValue('--muted').trim() || '#9eb0c8'
       const t = video.currentTime
+      const labels = labelsRef.current
 
       ctx.lineWidth = 2
       ctx.font = '600 12px system-ui, sans-serif'
       ctx.textBaseline = 'middle'
-      // Other people first so the previewed person's boxes end up on top.
-      const ordered = [...data.tracks].sort(
-        (a, b) => Number(data.highlightTrackIds.has(a.trackId)) - Number(data.highlightTrackIds.has(b.trackId)),
-      )
-      for (const track of ordered) {
+      for (const track of data.ordered) {
+        if (t < track.startSec - maxGapSec || t > track.endSec + maxGapSec) {
+          continue
+        }
         const box = boxAt(track.boxes, t, maxGapSec)
         if (!box) {
           continue
@@ -128,48 +192,106 @@ export const TrackOverlay = ({ video, tracks, sampleFps, highlightTrackIds, high
         ctx.strokeStyle = color
         ctx.strokeRect(x, y, w, h)
 
-        const label = highlighted ? data.highlightLabel : personName(track.label, track.groupId)
-        const labelW = ctx.measureText(label).width + 8
-        const labelY = y >= 18 ? y - 18 : y // inside the box when there's no room above
+        const metric = labels.get(track.trackId)
+        if (!metric) {
+          continue
+        }
+        const labelY = y >= 18 ? y - 18 : y
         ctx.fillStyle = color
-        ctx.fillRect(x - 1, labelY, labelW, 18)
+        ctx.fillRect(x - 1, labelY, metric.width, 18)
         ctx.fillStyle = '#04111f'
-        ctx.fillText(label, x + 3, labelY + 9)
+        ctx.fillText(metric.text, x + 3, labelY + 9)
       }
     }
     redrawRef.current = draw
 
-    // requestVideoFrameCallback fires per presented frame; fall back to rAF where unsupported.
     const frameVideo = video as FrameCallbackVideo
     const hasFrameCallback = typeof frameVideo.requestVideoFrameCallback === 'function'
-    let handle = 0
+    let playing = false
+    let frameHandle = 0
+    let drawSoon = false
+    let drawSoonHandle = 0
+
+    const scheduleDrawSoon = () => {
+      if (drawSoon) {
+        return
+      }
+      drawSoon = true
+      drawSoonHandle = requestAnimationFrame(() => {
+        drawSoon = false
+        draw()
+      })
+    }
+
+    const stopFrameLoop = () => {
+      if (!frameHandle) {
+        playing = false
+        return
+      }
+      if (hasFrameCallback) {
+        frameVideo.cancelVideoFrameCallback?.(frameHandle)
+      } else {
+        cancelAnimationFrame(frameHandle)
+      }
+      frameHandle = 0
+      playing = false
+    }
+
     const tick = () => {
+      if (!playing) {
+        return
+      }
       draw()
-      handle = hasFrameCallback
+      frameHandle = hasFrameCallback
         ? (frameVideo.requestVideoFrameCallback as (callback: () => void) => number)(tick)
         : requestAnimationFrame(tick)
     }
-    tick()
 
-    // Paused/seeking/metadata don't produce frame callbacks reliably, so redraw on those too.
-    const events = ['seeked', 'seeking', 'pause', 'loadedmetadata', 'timeupdate'] as const
-    events.forEach((name) => video.addEventListener(name, draw))
-    const observer = new ResizeObserver(draw)
+    const onPlay = () => {
+      if (playing) {
+        return
+      }
+      playing = true
+      tick()
+    }
+
+    const onPauseOrEnded = () => {
+      stopFrameLoop()
+      scheduleDrawSoon()
+    }
+
+    const onSeekedOrMetadata = () => scheduleDrawSoon()
+
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPauseOrEnded)
+    video.addEventListener('ended', onPauseOrEnded)
+    video.addEventListener('seeked', onSeekedOrMetadata)
+    video.addEventListener('loadedmetadata', onSeekedOrMetadata)
+
+    const observer = new ResizeObserver(scheduleDrawSoon)
     observer.observe(video)
 
+    if (!video.paused && !video.ended) {
+      onPlay()
+    } else {
+      scheduleDrawSoon()
+    }
+
     return () => {
-      if (hasFrameCallback) {
-        frameVideo.cancelVideoFrameCallback?.(handle)
-      } else {
-        cancelAnimationFrame(handle)
+      stopFrameLoop()
+      if (drawSoonHandle) {
+        cancelAnimationFrame(drawSoonHandle)
       }
-      events.forEach((name) => video.removeEventListener(name, draw))
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPauseOrEnded)
+      video.removeEventListener('ended', onPauseOrEnded)
+      video.removeEventListener('seeked', onSeekedOrMetadata)
+      video.removeEventListener('loadedmetadata', onSeekedOrMetadata)
       observer.disconnect()
       redrawRef.current = undefined
     }
   }, [video])
 
-  // Repaint immediately when the data changes while paused.
   useEffect(() => {
     redrawRef.current?.()
   }, [tracks, sampleFps, highlightTrackIds, highlightLabel])

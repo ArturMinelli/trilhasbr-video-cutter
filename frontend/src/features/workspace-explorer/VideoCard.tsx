@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { formatDuration } from '../../entities/video/model'
@@ -10,10 +10,10 @@ type VideoCardProps = {
   loadPreview: (videoId: number) => Promise<VideoPreviewResponse>
   selected: boolean
   selectionDisabled?: boolean
-  onSelectionChange: (checked: boolean) => void
+  onSelectionChange: (videoId: number, checked: boolean) => void
 }
 
-export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = false, onSelectionChange }: VideoCardProps) => {
+export const VideoCard = memo(({ video, loadPreview, selected, selectionDisabled = false, onSelectionChange }: VideoCardProps) => {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const [isVisible, setIsVisible] = useState(false)
 
@@ -33,7 +33,7 @@ export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = fa
           }
         }
       },
-      { rootMargin: '200px' },
+      { rootMargin: '0px' },
     )
 
     observer.observe(element)
@@ -54,7 +54,8 @@ export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = fa
   return (
     <article
       ref={cardRef}
-      className={`rounded-xl border p-3 shadow-[0_8px_24px_-18px_rgba(0,0,0,0.9)] transition ${
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 220px' }}
+      className={`rounded-xl border p-3 shadow-[0_8px_24px_-18px_rgba(0,0,0,0.9)] transition-colors ${
         selected
           ? 'border-[var(--primary)] bg-[linear-gradient(170deg,rgba(40,160,240,0.16),rgba(17,29,51,0.98))] shadow-[0_14px_34px_-18px_rgba(40,160,240,0.85)]'
           : 'border-[var(--border)] bg-[var(--surface)]'
@@ -62,7 +63,7 @@ export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = fa
     >
       <div className="relative mb-3 aspect-video overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]">
         <label
-          className={`absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold backdrop-blur transition ${
+          className={`absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-semibold transition-colors ${
             selectionDisabled
               ? 'cursor-not-allowed border-[var(--border)] bg-black/35 text-[var(--muted)]'
               : selected
@@ -74,7 +75,7 @@ export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = fa
             type="checkbox"
             checked={selected}
             disabled={selectionDisabled}
-            onChange={(event) => onSelectionChange(event.target.checked)}
+            onChange={(event) => onSelectionChange(video.id, event.target.checked)}
             className="h-3.5 w-3.5 accent-[var(--primary)]"
             aria-label={`Select ${video.name || 'video'}`}
           />
@@ -108,4 +109,4 @@ export const VideoCard = ({ video, loadPreview, selected, selectionDisabled = fa
       ) : null}
     </article>
   )
-}
+})

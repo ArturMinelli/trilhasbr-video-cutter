@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { personName } from '../../entities/person/model'
@@ -17,9 +17,6 @@ type Props = {
   onRemove: (trackId: number) => void
 }
 
-// Needs a backend asset handler serving the source file at /media/<videoId> (with range support).
-const mediaUrl = (track: PersonTrackDTO): string => `/media/${track.videoId}#t=${track.startSec},${track.endSec}`
-
 export const PersonPreview = ({ group, busy, onClose, onSplit, onRemove }: Props) => {
   const [activeId, setActiveId] = useState<number | undefined>(group.tracks[0]?.id)
   const active = group.tracks.find((track) => track.id === activeId) ?? group.tracks[0]
@@ -28,7 +25,6 @@ export const PersonPreview = ({ group, busy, onClose, onSplit, onRemove }: Props
   const [showBoxes, setShowBoxes] = useState(true)
   const [video, setVideo] = useState<HTMLVideoElement | null>(null)
   const videoId = active?.videoId
-  // Same key across tracks of one video, so switching tracks reuses the cached boxes.
   const boxesQuery = useQuery({
     queryKey: ['videoTrackBoxes', videoId],
     queryFn: () => backend.getVideoTrackBoxes(videoId as number),
@@ -38,6 +34,40 @@ export const PersonPreview = ({ group, busy, onClose, onSplit, onRemove }: Props
   const boxesError = boxes?.error?.message ?? (boxesQuery.error instanceof Error ? boxesQuery.error.message : undefined)
   const hasBoxes = !boxesError && (boxes?.tracks.length ?? 0) > 0
   const highlightTrackIds = useMemo(() => new Set(group.tracks.map((track) => track.id)), [group.tracks])
+
+  useEffect(() => {
+    if (!video || !active) {
+      return undefined
+    }
+    const seekToStart = () => {
+      video.currentTime = active.startSec
+      void video.play()
+    }
+    if (video.readyState >= 1) {
+      seekToStart()
+      return undefined
+    }
+    video.addEventListener('loadedmetadata', seekToStart, { once: true })
+    return () => video.removeEventListener('loadedmetadata', seekToStart)
+  }, [video, active?.id, active?.startSec])
+
+  useEffect(() => {
+    if (!video || !active) {
+      return undefined
+    }
+    const stopAtEnd = () => {
+      if (video.paused) {
+        return
+      }
+      const time = video.currentTime
+      if (time < active.endSec || time >= active.endSec + 0.5) {
+        return
+      }
+      video.pause()
+    }
+    video.addEventListener('timeupdate', stopAtEnd)
+    return () => video.removeEventListener('timeupdate', stopAtEnd)
+  }, [video, active?.id, active?.endSec])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -54,9 +84,9 @@ export const PersonPreview = ({ group, busy, onClose, onSplit, onRemove }: Props
         {active ? (
           <div className="relative mb-3">
             <video
-              key={active.id}
+              key={active.videoId}
               ref={setVideo}
-              src={mediaUrl(active)}
+              src={`/media/${active.videoId}`}
               controls
               autoPlay
               muted

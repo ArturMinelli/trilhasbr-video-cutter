@@ -269,6 +269,7 @@ func (r *VideoRepository) DeleteWorkspaceExportVideos(ctx context.Context, works
 		SELECT id, path
 		FROM videos
 		WHERE workspace_id = ?
+		  AND (path LIKE '%/exports/%' OR path LIKE '%\exports\%')
 	`, workspaceID)
 	if err != nil {
 		return 0, apperrors.Wrap(apperrors.CodeDB, "failed to query workspace videos for export cleanup", err, map[string]any{"workspaceId": workspaceID})

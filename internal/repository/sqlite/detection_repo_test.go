@@ -67,8 +67,16 @@ func TestDetectionRepository_ReplaceAndCascade(t *testing.T) {
 	if err != nil || total != 2 || len(groups) != 2 {
 		t.Fatalf("list: %v total=%d", err, total)
 	}
-	if len(groups[0].Tracks[0].Embedding) != domain.EmbeddingDim || groups[0].Tracks[0].Embedding[3] != 0.5 || groups[0].Tracks[0].VideoName != "a" {
+	if groups[0].Tracks[0].VideoName != "a" {
 		t.Fatalf("track roundtrip: %+v", groups[0].Tracks[0])
+	}
+	var storedEmbedding []byte
+	if err := db.QueryRow(`SELECT embedding FROM tracks WHERE id = ?`, out[0].ID).Scan(&storedEmbedding); err != nil {
+		t.Fatal(err)
+	}
+	decoded := decodeEmbedding(storedEmbedding)
+	if len(decoded) != domain.EmbeddingDim || decoded[3] != 0.5 {
+		t.Fatalf("embedding roundtrip: len=%d [3]=%v", len(decoded), decoded[3])
 	}
 
 	// Re-run on the same video replaces tracks and drops old groups.
@@ -347,5 +355,25 @@ func TestDetectionRepository_GroupLabels(t *testing.T) {
 	target, err = repo.MergeGroups(ctx, []int64{target, newID})
 	if err != nil || labelOf(target) != "Ana" {
 		t.Fatalf("named target must keep its name: %v %q", err, labelOf(target))
+	}
+}
+
+func TestListGroupsFiltersSelectedIDs(t *testing.T) {
+	ctx, _, repo, workspace, videos := setupDetection(t)
+	_, err := repo.ReplaceTracksForVideo(ctx, videos[0].ID, []domain.Track{{StartSec: 1, EndSec: 2}, {StartSec: 3, EndSec: 4}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	groups, _, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspace})
+	if err != nil || len(groups) != 2 {
+		t.Fatalf("groups: %v %v", groups, err)
+	}
+	selected, total, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspace, GroupIDs: []int64{groups[1].ID, groups[1].ID, -1}})
+	if err != nil || total != 1 || len(selected) != 1 || selected[0].ID != groups[1].ID {
+		t.Fatalf("selected: %v total %d error %v", selected, total, err)
+	}
+	other, total, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspace + 999, GroupIDs: []int64{groups[1].ID}})
+	if err != nil || total != 0 || len(other) != 0 {
+		t.Fatalf("unexpected cross-workspace result: %v %d %v", other, total, err)
 	}
 }

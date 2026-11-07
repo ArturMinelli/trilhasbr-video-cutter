@@ -38,6 +38,7 @@ func TestVideoRepository_DeleteWorkspaceExportVideos(t *testing.T) {
 		{Name: "sub", Path: filepath.Join(workspaceDir, "camera", "sub.mp4"), DurationSeconds: 12},
 		{Name: "export1", Path: filepath.Join(workspaceDir, "exports", "old.mp4"), DurationSeconds: 8},
 		{Name: "export2", Path: filepath.Join(workspaceDir, "nested", "Exports", "old2.mp4"), DurationSeconds: 9},
+		{Name: "export-win", Path: `camera\exports\clip.mp4`, DurationSeconds: 7},
 	}
 	if err = videoRepo.ReplaceWorkspaceVideos(ctx, workspace.ID, videos); err != nil {
 		t.Fatalf("failed to seed videos: %v", err)
@@ -47,8 +48,8 @@ func TestVideoRepository_DeleteWorkspaceExportVideos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("cleanup failed: %v", err)
 	}
-	if deleted != 2 {
-		t.Fatalf("expected 2 deleted rows, got %d", deleted)
+	if deleted != 3 {
+		t.Fatalf("expected 3 deleted rows, got %d", deleted)
 	}
 
 	remaining, err := videoRepo.ListByWorkspaceAll(ctx, workspace.ID)

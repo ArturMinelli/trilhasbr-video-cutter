@@ -1,3 +1,5 @@
+import { memo } from 'react'
+
 import { formatDuration } from '../../entities/video/model'
 import { formatPersonRange, personName, plural } from '../../entities/person/model'
 import type { PersonGroupDTO } from '../../infrastructure/backend/types'
@@ -6,31 +8,32 @@ import { PersonName } from './PersonName'
 type Props = {
   group: PersonGroupDTO
   selected: boolean
-  onSelectionChange: (checked: boolean) => void
-  onOpen: () => void
+  onToggle: (groupId: number, checked: boolean) => void
+  onOpen: (groupId: number) => void
 }
 
-export const PersonCard = ({ group, selected, onSelectionChange, onOpen }: Props) => {
+export const PersonCard = memo(({ group, selected, onToggle, onOpen }: Props) => {
   const first = group.tracks[0]
   const name = personName(group.label, group.id)
   return (
     <article
-      className={`rounded-xl border p-3 transition ${
+      style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 280px' }}
+      className={`rounded-xl border p-3 transition-colors ${
         selected ? 'border-[var(--primary)] bg-[var(--surface-soft)]' : 'border-[var(--border)] bg-[var(--surface)]'
       }`}
     >
       <div className="relative mb-3 aspect-[3/4] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]">
-        <label className="absolute left-2 top-2 z-10 inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--border)] bg-black/40 px-2 py-1 text-[11px] font-semibold text-[var(--text)] backdrop-blur">
+        <label className="absolute left-2 top-2 z-10 inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--border)] bg-black/40 px-2 py-1 text-[11px] font-semibold text-[var(--text)]">
           <input
             type="checkbox"
             checked={selected}
-            onChange={(event) => onSelectionChange(event.target.checked)}
+            onChange={(event) => onToggle(group.id, event.target.checked)}
             className="h-3.5 w-3.5 accent-[var(--primary)]"
             aria-label={`Select ${name}`}
           />
           <span>Select</span>
         </label>
-        <button type="button" onClick={onOpen} className="h-full w-full" aria-label={`Preview ${name}`}>
+        <button type="button" onClick={() => onOpen(group.id)} className="h-full w-full" aria-label={`Preview ${name}`}>
           {group.thumbnailDataUrl ? (
             <img src={group.thumbnailDataUrl} alt={name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
@@ -54,4 +57,4 @@ export const PersonCard = ({ group, selected, onSelectionChange, onOpen }: Props
       </div>
     </article>
   )
-}
+})

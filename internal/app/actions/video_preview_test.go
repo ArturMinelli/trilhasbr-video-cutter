@@ -199,3 +199,24 @@ func TestVideoPreviewAction_ThumbnailGenerationFailure(t *testing.T) {
 		t.Fatalf("expected code %s, got %s", apperrors.CodeProbe, appErr.Code)
 	}
 }
+
+func TestVideoPreviewAction_CancelWhileWaitingForSlot(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source.mp4")
+	if err := os.WriteFile(source, []byte("video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	probe := &probeStub{}
+	action := &VideoPreviewAction{VideoRepo: &previewVideoRepoStub{video: domain.Video{ID: 1, WorkspaceID: 1, Path: source}}, MediaProbe: probe, MediaThumbnail: &thumbnailStub{}, ThumbnailRoot: t.TempDir()}
+	action.previewOnce.Do(func() { action.previewSlots = make(chan struct{}, 2) })
+	action.previewSlots <- struct{}{}
+	action.previewSlots <- struct{}{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := action.Execute(ctx, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	if probe.callCount != 0 {
+		t.Fatal("probe ran after cancellation")
+	}
+}

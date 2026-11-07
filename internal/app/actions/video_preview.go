@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"trilhasbr-video-cutter/internal/apperrors"
 	"trilhasbr-video-cutter/internal/media/ffmpeg"
@@ -24,6 +25,9 @@ type VideoPreviewAction struct {
 	MediaThumbnail ffmpeg.MediaThumbnailer
 	ThumbnailRoot  string
 	PreviewWidth   int
+
+	previewOnce  sync.Once
+	previewSlots chan struct{}
 }
 
 type VideoPreviewResult struct {
@@ -69,6 +73,21 @@ func (a *VideoPreviewAction) Execute(ctx context.Context, videoID int64) (VideoP
 			Cached:   true,
 			FilePath: thumbnailPath,
 		}, nil
+	}
+
+	// Limit concurrent ffmpeg processes when many cards become visible together.
+	a.previewOnce.Do(func() { a.previewSlots = make(chan struct{}, 2) })
+	select {
+	case a.previewSlots <- struct{}{}:
+		defer func() { <-a.previewSlots }()
+	case <-ctx.Done():
+		return VideoPreviewResult{}, ctx.Err()
+	}
+	// Another request may have generated the same preview while this one waited.
+	if dataURL, readErr := readImageDataURLIfExists(thumbnailPath); readErr != nil {
+		return VideoPreviewResult{}, readErr
+	} else if dataURL != "" {
+		return VideoPreviewResult{VideoID: video.ID, DataURL: dataURL, Cached: true, FilePath: thumbnailPath}, nil
 	}
 
 	probe, err := a.MediaProbe.Probe(ctx, video.Path)

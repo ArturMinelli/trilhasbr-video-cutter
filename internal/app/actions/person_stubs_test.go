@@ -63,8 +63,20 @@ func (s personDetectionStub) ReplaceTracksForVideo(context.Context, int64, []dom
 func (s personDetectionStub) ListVideoTrackBoxes(context.Context, int64) ([]domain.VideoTrackBoxes, error) {
 	return nil, nil
 }
-func (s personDetectionStub) ListGroups(context.Context, domain.GroupFilter) ([]domain.PersonGroup, int, error) {
-	return s.groups, len(s.groups), nil
+func (s personDetectionStub) ListGroups(_ context.Context, filter domain.GroupFilter) ([]domain.PersonGroup, int, error) {
+	if len(filter.GroupIDs) == 0 {
+		return s.groups, len(s.groups), nil
+	}
+	var groups []domain.PersonGroup
+	for _, group := range s.groups {
+		for _, id := range filter.GroupIDs {
+			if group.ID == id {
+				groups = append(groups, group)
+				break
+			}
+		}
+	}
+	return groups, len(groups), nil
 }
 func (s personDetectionStub) MergeGroups(context.Context, []int64) (int64, error) { return 0, nil }
 func (s personDetectionStub) SplitTrack(context.Context, int64, int64) (int64, error) {

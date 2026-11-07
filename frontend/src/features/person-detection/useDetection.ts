@@ -57,7 +57,7 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
         videosDone: event.videosDone,
         currentVideo: event.currentVideo,
         tracksFound: event.tracksFound,
-        files: current.files.some((file) => file.id === event.videoId)
+        files: event.queue ? event.queue.map((file) => ({ ...file, status: 'waiting' })) : current.files.some((file) => file.id === event.videoId)
           ? current.files.map((file) => file.id === event.videoId ? { id: event.videoId, name: event.videoName, status: event.videoStatus, percent: event.percent } : file)
           : [...current.files, { id: event.videoId, name: event.videoName, status: event.videoStatus, percent: event.percent }],
       }))

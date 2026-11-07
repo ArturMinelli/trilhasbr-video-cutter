@@ -134,20 +134,13 @@ func (a *PersonCutAction) Execute(ctx context.Context, jobID string, input Start
 		return domain.CutResult{}, err
 	}
 
-	// ponytail: lists every group of the workspace to pick the selected ones; add a GetGroups(ids) repo method if workspaces get huge.
-	all, _, err := a.Detection.ListGroups(ctx, domain.GroupFilter{WorkspaceID: input.WorkspaceID, PageSize: 1 << 20})
-	if err != nil {
-		return domain.CutResult{}, err
-	}
 	wanted := map[int64]bool{}
 	for _, id := range input.GroupIDs {
 		wanted[id] = true
 	}
-	var groups []domain.PersonGroup
-	for _, group := range all {
-		if wanted[group.ID] {
-			groups = append(groups, group)
-		}
+	groups, _, err := a.Detection.ListGroups(ctx, domain.GroupFilter{WorkspaceID: input.WorkspaceID, GroupIDs: input.GroupIDs, PageSize: len(wanted)})
+	if err != nil {
+		return domain.CutResult{}, err
 	}
 	if len(groups) != len(wanted) {
 		return domain.CutResult{}, apperrors.New(apperrors.CodeValidation, "one or more selected people no longer exist", map[string]any{"groupIds": input.GroupIDs})

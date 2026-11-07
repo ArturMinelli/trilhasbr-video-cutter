@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { useBackend } from '../../infrastructure/backend/context'
 import type { ActionResponse, PersonGroupResponse } from '../../infrastructure/backend/types'
@@ -10,8 +10,8 @@ import { CutSelectedModal, type CutSelectedInput } from './CutSelectedModal'
 import { PersonGrid } from './PersonGrid'
 import { PersonPreview } from './PersonPreview'
 
-// ponytail: one page of 500 groups, no pager; add pagination if a workspace exceeds this.
-const PAGE_SIZE = 500
+// ponytail: load 60 at a time via Show more; no full-list fetch until the user asks.
+const PAGE_STEP = 60
 
 export const PeopleGallery = ({
   workspaceId,
@@ -29,10 +29,11 @@ export const PeopleGallery = ({
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [previewId, setPreviewId] = useState<number | null>(null)
   const [cutOpen, setCutOpen] = useState(false)
+  const [pageSize, setPageSize] = useState(PAGE_STEP)
 
   const minDurationSec = Math.max(0, Number(minDuration) || 0)
   const minConfidenceValue = Math.min(1, Math.max(0, (Number(minConfidence) || 0) / 100))
-  const queryKey = ['people', workspaceId, minDurationSec, minConfidenceValue]
+  const queryKey = ['people', workspaceId, minDurationSec, minConfidenceValue, pageSize]
 
   const peopleQuery = useQuery({
     queryKey,
@@ -42,8 +43,9 @@ export const PeopleGallery = ({
         minDurationSec,
         minConfidence: minConfidenceValue,
         page: 1,
-        pageSize: PAGE_SIZE,
+        pageSize,
       }),
+    placeholderData: keepPreviousData,
   })
 
   const groups = useMemo(() => peopleQuery.data?.items ?? [], [peopleQuery.data?.items])
@@ -106,7 +108,7 @@ export const PeopleGallery = ({
     onError,
   })
 
-  const toggle = (groupId: number, checked: boolean) =>
+  const toggle = useCallback((groupId: number, checked: boolean) => {
     setSelected((current) => {
       const next = new Set(current)
       if (checked) {
@@ -116,6 +118,11 @@ export const PeopleGallery = ({
       }
       return next
     })
+  }, [])
+
+  const openPreview = useCallback((groupId: number) => {
+    setPreviewId(groupId)
+  }, [])
 
   const total = peopleQuery.data?.total ?? 0
   const editing = splitMutation.isPending || removeMutation.isPending
@@ -126,13 +133,25 @@ export const PeopleGallery = ({
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
             Min duration (s)
-            <Input value={minDuration} onChange={(event) => setMinDuration(event.target.value)} type="number" min={0} className="w-28" />
+            <Input
+              value={minDuration}
+              onChange={(event) => {
+                setMinDuration(event.target.value)
+                setPageSize(PAGE_STEP)
+              }}
+              type="number"
+              min={0}
+              className="w-28"
+            />
           </label>
           <label className="flex flex-col gap-1 text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
             Min confidence (%)
             <Input
               value={minConfidence}
-              onChange={(event) => setMinConfidence(event.target.value)}
+              onChange={(event) => {
+                setMinConfidence(event.target.value)
+                setPageSize(PAGE_STEP)
+              }}
               type="number"
               min={0}
               max={100}
@@ -161,12 +180,21 @@ export const PeopleGallery = ({
       {peopleQuery.isLoading ? <p className="text-sm text-[var(--muted)]">Loading people…</p> : null}
       {peopleQuery.data?.error ? <p className="mb-3 text-sm text-[var(--danger)]">{peopleQuery.data.error.message}</p> : null}
       {total > groups.length ? (
-        <p className="mb-3 text-xs text-[var(--muted)]">
-          Showing {groups.length} of {total}. Raise the filters to narrow the list.
-        </p>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="text-xs text-[var(--muted)]">
+            Showing {groups.length} of {total}. Raise the filters to narrow the list.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={() => setPageSize((current) => current + PAGE_STEP)}
+            disabled={peopleQuery.isFetching}
+          >
+            Show more
+          </Button>
+        </div>
       ) : null}
 
-      <PersonGrid groups={groups} selectedIds={selectedIds} onToggle={toggle} onOpen={(group) => setPreviewId(group.id)} />
+      <PersonGrid groups={groups} selectedIds={selectedIds} onToggle={toggle} onOpen={openPreview} />
 
       {previewGroup ? (
         <PersonPreview

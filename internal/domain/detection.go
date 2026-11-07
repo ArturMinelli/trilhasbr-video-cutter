@@ -84,6 +84,7 @@ type PersonGroup struct {
 }
 
 type GroupFilter struct {
+	GroupIDs       []int64
 	WorkspaceID    int64
 	MinDurationSec float64
 	MinConfidence  float64

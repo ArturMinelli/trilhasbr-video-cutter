@@ -37,16 +37,22 @@ type StartDetectionInput struct {
 	SampleFPS   float64 `json:"sampleFps"` // 0 = default (5)
 }
 
+type DetectQueuedVideo struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
 type DetectProgressEvent struct {
-	JobID        string   `json:"jobId"`
-	VideosTotal  int      `json:"videosTotal"`
-	VideosDone   int      `json:"videosDone"`
-	CurrentVideo string   `json:"currentVideo"`
-	TracksFound  int      `json:"tracksFound"`
-	VideoID      int64    `json:"videoId"`
-	VideoName    string   `json:"videoName"`
-	VideoStatus  string   `json:"videoStatus"`
-	Percent      *float64 `json:"percent,omitempty"`
+	Queue        []DetectQueuedVideo `json:"queue"`
+	JobID        string              `json:"jobId"`
+	VideosTotal  int                 `json:"videosTotal"`
+	VideosDone   int                 `json:"videosDone"`
+	CurrentVideo string              `json:"currentVideo"`
+	TracksFound  int                 `json:"tracksFound"`
+	VideoID      int64               `json:"videoId"`
+	VideoName    string              `json:"videoName"`
+	VideoStatus  string              `json:"videoStatus"`
+	Percent      *float64            `json:"percent,omitempty"`
 }
 
 type DetectFinishedEvent struct {
@@ -141,8 +147,12 @@ func (a *DetectRunAction) Execute(ctx context.Context, jobID string, in StartDet
 			onProgress(DetectProgressEvent{JobID: jobID, VideosTotal: res.VideosTotal, VideosDone: res.VideosDone, TracksFound: res.TracksFound, VideoID: v.ID, VideoName: v.Name, VideoStatus: status, Percent: percent})
 		}
 	}
-	for _, v := range videos {
-		emit(v, "waiting", nil)
+	if onProgress != nil {
+		queue := make([]DetectQueuedVideo, 0, len(videos))
+		for _, v := range videos {
+			queue = append(queue, DetectQueuedVideo{ID: v.ID, Name: v.Name})
+		}
+		onProgress(DetectProgressEvent{JobID: jobID, VideosTotal: len(videos), Queue: queue})
 	}
 	finishVideo := func(v domain.Video, tracks int, skipped bool, verr error) {
 		mu.Lock()

@@ -19,10 +19,10 @@ export const LoadWorkspaceButton = ({ className = '' }: { className?: string }) 
         return
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['workspaces'] })
       if (response.workspace?.id) {
         navigate(`/workspaces/${response.workspace.id}`)
       }
+      void queryClient.invalidateQueries({ queryKey: ['workspaces'] })
 
       if (response.summary) {
         showToast('Workspace imported', `Indexed ${response.summary.indexed} videos`, 'success')

@@ -5,7 +5,7 @@ type Props = {
   groups: PersonGroupDTO[]
   selectedIds: Set<number>
   onToggle: (groupId: number, checked: boolean) => void
-  onOpen: (group: PersonGroupDTO) => void
+  onOpen: (groupId: number) => void
 }
 
 export const PersonGrid = ({ groups, selectedIds, onToggle, onOpen }: Props) => {
@@ -23,8 +23,8 @@ export const PersonGrid = ({ groups, selectedIds, onToggle, onOpen }: Props) => 
           key={group.id}
           group={group}
           selected={selectedIds.has(group.id)}
-          onSelectionChange={(checked) => onToggle(group.id, checked)}
-          onOpen={() => onOpen(group)}
+          onToggle={onToggle}
+          onOpen={onOpen}
         />
       ))}
     </div>

@@ -9,15 +9,20 @@ import { Input } from '../../shared/ui/Input'
 
 const MAX_LABEL = 60
 
-// Person title with an inline rename control (empty name clears it; the id stays visible when named).
-export const PersonName = ({ group, className = '' }: { group: PersonGroupDTO; className?: string }) => {
+const PersonNameEditor = ({
+  group,
+  className,
+  onClose,
+}: {
+  group: PersonGroupDTO
+  className: string
+  onClose: () => void
+}) => {
   const backend = useBackend()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const settled = useRef(false) // Enter/Esc/blur must only act once
-  const name = personName(group.label, group.id)
+  const [draft, setDraft] = useState(group.label ?? '')
+  const settled = useRef(false)
 
   const rename = useMutation({
     mutationFn: (label: string) => backend.renamePerson(group.id, label),
@@ -32,14 +37,9 @@ export const PersonName = ({ group, className = '' }: { group: PersonGroupDTO; c
       ])
     },
     onError: (error) => showToast('Unexpected error', error instanceof Error ? error.message : 'Unknown error', 'error'),
-    onSettled: () => setEditing(false),
+    onSettled: onClose,
   })
 
-  const start = () => {
-    settled.current = false
-    setDraft(group.label ?? '')
-    setEditing(true)
-  }
   const commit = () => {
     if (settled.current) {
       return
@@ -47,35 +47,51 @@ export const PersonName = ({ group, className = '' }: { group: PersonGroupDTO; c
     settled.current = true
     const next = draft.trim()
     if (next === (group.label ?? '')) {
-      setEditing(false)
+      onClose()
       return
     }
     rename.mutate(next)
   }
   const cancel = () => {
     settled.current = true
-    setEditing(false)
+    onClose()
   }
+
+  return (
+    <Input
+      autoFocus
+      value={draft}
+      maxLength={MAX_LABEL}
+      disabled={rename.isPending}
+      placeholder={`Person ${group.id}`}
+      aria-label={`Name for person ${group.id}`}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          commit()
+        } else if (event.key === 'Escape') {
+          cancel()
+        }
+      }}
+      className={`py-1 ${className}`}
+    />
+  )
+}
+
+// Person title with an inline rename control (empty name clears it; the id stays visible when named).
+export const PersonName = ({ group, className = '' }: { group: PersonGroupDTO; className?: string }) => {
+  const [editing, setEditing] = useState(false)
+  const name = personName(group.label, group.id)
 
   if (editing) {
     return (
-      <Input
-        autoFocus
-        value={draft}
-        maxLength={MAX_LABEL}
-        disabled={rename.isPending}
-        placeholder={`Person ${group.id}`}
-        aria-label={`Name for person ${group.id}`}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            commit()
-          } else if (event.key === 'Escape') {
-            cancel()
-          }
+      <PersonNameEditor
+        group={group}
+        className={className}
+        onClose={() => {
+          setEditing(false)
         }}
-        className={`py-1 ${className}`}
       />
     )
   }
@@ -88,7 +104,7 @@ export const PersonName = ({ group, className = '' }: { group: PersonGroupDTO; c
       {group.label?.trim() ? <span className="shrink-0 text-xs text-[var(--muted)]">#{group.id}</span> : null}
       <button
         type="button"
-        onClick={start}
+        onClick={() => setEditing(true)}
         title="Rename"
         aria-label={`Rename ${name}`}
         className="shrink-0 rounded px-1 text-xs text-[var(--muted)] hover:text-[var(--text)]"

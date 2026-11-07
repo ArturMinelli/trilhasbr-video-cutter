@@ -319,6 +319,7 @@ export type StartPeopleCutRequest = {
 }
 
 export type DetectProgressEvent = {
+  queue: { id: number; name: string }[] | null
   videoId: number
   videoName: string
   videoStatus: 'waiting' | 'processing' | 'finalizing' | 'completed' | 'skipped' | 'failed'

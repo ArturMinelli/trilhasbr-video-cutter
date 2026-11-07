@@ -255,3 +255,20 @@ func TestDetectRun_PersistsNormalizedBoxPath(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectRun_ReportsQueueInOneEvent(t *testing.T) {
+	env := setupDetect(t, "a", "b", "c")
+	var events []DetectProgressEvent
+	_, err := env.action.Execute(env.ctx, "j", StartDetectionInput{WorkspaceID: env.wsID}, func(event DetectProgressEvent) { events = append(events, event) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) == 0 || len(events[0].Queue) != 3 {
+		t.Fatalf("expected initial queue of three, got %+v", events)
+	}
+	for _, event := range events[1:] {
+		if len(event.Queue) != 0 || event.VideoStatus == "waiting" {
+			t.Fatalf("unexpected extra queue event: %+v", event)
+		}
+	}
+}

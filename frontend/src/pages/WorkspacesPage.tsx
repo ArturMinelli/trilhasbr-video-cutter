@@ -10,6 +10,7 @@ export const WorkspacesPage = () => {
   const workspacesQuery = useQuery({
     queryKey: ['workspaces'],
     queryFn: () => backend.listWorkspaces(),
+    staleTime: 30_000,
   })
 
   const workspaces = workspacesQuery.data?.workspaces ?? []
