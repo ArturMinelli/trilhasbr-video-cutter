@@ -38,11 +38,15 @@ type StartDetectionInput struct {
 }
 
 type DetectProgressEvent struct {
-	JobID        string `json:"jobId"`
-	VideosTotal  int    `json:"videosTotal"`
-	VideosDone   int    `json:"videosDone"`
-	CurrentVideo string `json:"currentVideo"`
-	TracksFound  int    `json:"tracksFound"`
+	JobID        string   `json:"jobId"`
+	VideosTotal  int      `json:"videosTotal"`
+	VideosDone   int      `json:"videosDone"`
+	CurrentVideo string   `json:"currentVideo"`
+	TracksFound  int      `json:"tracksFound"`
+	VideoID      int64    `json:"videoId"`
+	VideoName    string   `json:"videoName"`
+	VideoStatus  string   `json:"videoStatus"`
+	Percent      *float64 `json:"percent,omitempty"`
 }
 
 type DetectFinishedEvent struct {
@@ -130,6 +134,16 @@ func (a *DetectRunAction) Execute(ctx context.Context, jobID string, in StartDet
 	start := time.Now()
 	res := DetectResult{RunID: run.ID, VideosTotal: len(videos)}
 	var mu sync.Mutex
+	emit := func(v domain.Video, status string, percent *float64) {
+		mu.Lock()
+		defer mu.Unlock()
+		if onProgress != nil {
+			onProgress(DetectProgressEvent{JobID: jobID, VideosTotal: res.VideosTotal, VideosDone: res.VideosDone, TracksFound: res.TracksFound, VideoID: v.ID, VideoName: v.Name, VideoStatus: status, Percent: percent})
+		}
+	}
+	for _, v := range videos {
+		emit(v, "waiting", nil)
+	}
 	finishVideo := func(v domain.Video, tracks int, skipped bool, verr error) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -142,8 +156,14 @@ func (a *DetectRunAction) Execute(ctx context.Context, jobID string, in StartDet
 			res.VideosFailed++
 			res.Failures = append(res.Failures, DetectVideoFailure{VideoID: v.ID, Name: v.Name, Error: apperrors.ToPublic(verr)})
 		}
+		status := "completed"
+		if skipped {
+			status = "skipped"
+		} else if verr != nil {
+			status = "failed"
+		}
 		if onProgress != nil {
-			onProgress(DetectProgressEvent{JobID: jobID, VideosTotal: res.VideosTotal, VideosDone: res.VideosDone, CurrentVideo: v.Name, TracksFound: res.TracksFound})
+			onProgress(DetectProgressEvent{JobID: jobID, VideosTotal: res.VideosTotal, VideosDone: res.VideosDone, CurrentVideo: v.Name, TracksFound: res.TracksFound, VideoID: v.ID, VideoName: v.Name, VideoStatus: status})
 		}
 	}
 
@@ -163,7 +183,8 @@ func (a *DetectRunAction) Execute(ctx context.Context, jobID string, in StartDet
 				if ctx.Err() != nil {
 					return
 				}
-				tracks, skipped, verr := a.processVideo(ctx, v, fps, logger)
+				emit(v, "processing", nil)
+				tracks, skipped, verr := a.processVideo(ctx, v, fps, logger, func(status string, percent *float64) { emit(v, status, percent) })
 				if ctx.Err() != nil {
 					return // in-flight video is not persisted and not counted
 				}
@@ -225,7 +246,7 @@ func fileKey(path string) (size, mtime int64) {
 }
 
 // processVideo analyzes one video. Returns the number of tracks stored, or skipped=true when the stored analysis matches.
-func (a *DetectRunAction) processVideo(ctx context.Context, v domain.Video, fps float64, logger *slog.Logger) (tracks int, skipped bool, err error) {
+func (a *DetectRunAction) processVideo(ctx context.Context, v domain.Video, fps float64, logger *slog.Logger, progress func(string, *float64)) (tracks int, skipped bool, err error) {
 	st, err := os.Stat(v.Path)
 	if err != nil {
 		return 0, false, apperrors.Wrap(apperrors.CodeIO, "cannot read video file", err, map[string]any{"path": v.Path})
@@ -242,10 +263,11 @@ func (a *DetectRunAction) processVideo(ctx context.Context, v domain.Video, fps 
 	}
 
 	started := time.Now()
-	found, frames, frameSz, err := a.analyze(ctx, v, fps)
+	found, frames, frameSz, err := a.analyze(ctx, v, fps, progress)
 	if err != nil {
 		return 0, false, err
 	}
+	progress("finalizing", nil)
 	if err = a.writeThumbnails(ctx, v, fps, found); err != nil {
 		// A missing thumbnail must not discard the tracks; the gallery falls back to no image.
 		logger.Warn("thumbnail generation failed", "videoId", v.ID, "error", err)
@@ -268,7 +290,7 @@ func (a *DetectRunAction) processVideo(ctx context.Context, v domain.Video, fps 
 // frameSize is the decoded frame size (after rotation and downscale) that tracker boxes are expressed in.
 type frameSize struct{ w, h int }
 
-func (a *DetectRunAction) analyze(ctx context.Context, v domain.Video, fps float64) ([]tracking.Track, int, frameSize, error) {
+func (a *DetectRunAction) analyze(ctx context.Context, v domain.Video, fps float64, progress func(string, *float64)) ([]tracking.Track, int, frameSize, error) {
 	stream, err := a.Media.OpenFrames(ctx, v.Path, fps, maxDecodeWidth)
 	if err != nil {
 		return nil, 0, frameSize{}, err
@@ -278,6 +300,7 @@ func (a *DetectRunAction) analyze(ctx context.Context, v domain.Video, fps float
 
 	tr := tracking.New(tracking.Config{FPS: fps})
 	frames := 0
+	last := time.Time{}
 	for {
 		f, err := stream.Next()
 		if errors.Is(err, io.EOF) {
@@ -315,6 +338,15 @@ func (a *DetectRunAction) analyze(ctx context.Context, v domain.Video, fps float
 			}
 		}
 		tr.Update(f.TimeSec, dets) // every frame, including empty ones
+		if time.Since(last) >= 500*time.Millisecond {
+			var percent *float64
+			if v.DurationSeconds > 0 {
+				value := math.Min(99, math.Max(0, f.TimeSec/v.DurationSeconds*100))
+				percent = &value
+			}
+			progress("processing", percent)
+			last = time.Now()
+		}
 	}
 	return tr.Finish(), frames, size, nil
 }

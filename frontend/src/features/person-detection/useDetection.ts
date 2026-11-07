@@ -10,10 +10,11 @@ export type DetectionState = {
   currentVideo: string
   tracksFound: number
   elapsedMs?: number
+  files: { id: number; name: string; status: string; percent?: number }[]
   errorMessage?: string
 }
 
-const idle: DetectionState = { status: 'idle', videosTotal: 0, videosDone: 0, currentVideo: '', tracksFound: 0 }
+const idle: DetectionState = { status: 'idle', videosTotal: 0, videosDone: 0, currentVideo: '', tracksFound: 0, files: [] }
 
 export type Detection = ReturnType<typeof useDetection>
 
@@ -56,6 +57,9 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
         videosDone: event.videosDone,
         currentVideo: event.currentVideo,
         tracksFound: event.tracksFound,
+        files: current.files.some((file) => file.id === event.videoId)
+          ? current.files.map((file) => file.id === event.videoId ? { id: event.videoId, name: event.videoName, status: event.videoStatus, percent: event.percent } : file)
+          : [...current.files, { id: event.videoId, name: event.videoName, status: event.videoStatus, percent: event.percent }],
       }))
     })
     const offFinished = backend.onDetectFinished((event) => {
@@ -78,7 +82,7 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
         return
       }
       startingRef.current = false
-      setState((current) => ({ ...current, status: 'failed', currentVideo: '', errorMessage: event.error.message }))
+      setState((current) => ({ ...current, status: 'failed', currentVideo: '', errorMessage: event.error.message, files: current.files.map((file) => ['waiting', 'processing', 'finalizing'].includes(file.status) ? { ...file, status: 'failed' } : file) }))
       showToast('Detection failed', event.error.message, 'error')
       settledRef.current()
     })
@@ -125,10 +129,15 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
       return
     }
     // Cancellation may not emit a finished event; read the final job state instead.
-    const job = (await backend.getDetectionJob(jobId)).job
-    if (job && job.status === 'CANCELLED') {
+    let job = (await backend.getDetectionJob(jobId)).job
+    while (job && (job.status === 'RUNNING' || job.status === 'PENDING')) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      job = (await backend.getDetectionJob(jobId)).job
+    }
+    if (job && job.status === 'CANCELLED' && jobRef.current === jobId) {
       startingRef.current = false
-      setState((current) => ({ ...current, status: 'cancelled', currentVideo: '', tracksFound: job.tracksFound }))
+      const tracksFound = job.tracksFound
+      setState((current) => ({ ...current, status: 'cancelled', currentVideo: '', tracksFound, files: current.files.map((file) => ['waiting', 'processing', 'finalizing'].includes(file.status) ? { ...file, status: 'cancelled' } : file) }))
       settledRef.current()
     }
   }, [backend, showToast])
