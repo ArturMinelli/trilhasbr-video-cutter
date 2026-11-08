@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useBackend } from '../../infrastructure/backend/context'
+import type { AppError } from '../../infrastructure/backend/types'
 import { useToast } from '../../shared/toast/context'
+
+const formatAppError = (error: AppError): string => `${error.code}: ${error.message}`
 
 export type DetectionState = {
   status: 'idle' | 'starting' | 'running' | 'done' | 'cancelled' | 'failed'
@@ -18,7 +21,7 @@ const idle: DetectionState = { status: 'idle', videosTotal: 0, videosDone: 0, cu
 
 export type Detection = ReturnType<typeof useDetection>
 
-export const useDetection = (workspaceId: number, onSettled: () => void) => {
+export const useDetection = (workspaceId: number, onSettled: () => void, onCompleted?: () => void) => {
   const backend = useBackend()
   const { showToast } = useToast()
   const [state, setState] = useState<DetectionState>(idle)
@@ -26,6 +29,8 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
   const startingRef = useRef(false)
   const settledRef = useRef(onSettled)
   settledRef.current = onSettled
+  const completedRef = useRef(onCompleted)
+  completedRef.current = onCompleted
 
   // Events can arrive before startDetection resolves, so adopt the first job id seen while starting.
   const matches = useCallback((jobId: string): boolean => {
@@ -76,6 +81,7 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
         elapsedMs: event.elapsedMs,
       }))
       settledRef.current()
+      completedRef.current?.()
     })
     const offFailed = backend.onDetectFailed((event) => {
       if (!matches(event.jobId)) {
@@ -83,7 +89,7 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
       }
       startingRef.current = false
       setState((current) => ({ ...current, status: 'failed', currentVideo: '', errorMessage: event.error.message, files: current.files.map((file) => ['waiting', 'processing', 'finalizing'].includes(file.status) ? { ...file, status: 'failed' } : file) }))
-      showToast('Detection failed', event.error.message, 'error')
+      showToast('Detection failed', formatAppError(event.error), 'error')
       settledRef.current()
     })
     return () => {
@@ -102,7 +108,7 @@ export const useDetection = (workspaceId: number, onSettled: () => void) => {
         const response = await backend.startDetection({ workspaceId, sampleFps })
         if (response.error || !response.jobId) {
           startingRef.current = false
-          const message = response.error?.message ?? 'Missing job id in response'
+          const message = response.error ? formatAppError(response.error) : 'Missing job id in response'
           setState({ ...idle, status: 'failed', errorMessage: message })
           showToast('Failed to start detection', message, 'error')
           return

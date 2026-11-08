@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-06
 
-**Status**: Draft
+**Status**: Complete
 
 **Input**: User description: "Let a user detect people across all videos of a workspace (local person detection + re-identification + tracking), present the people found, and let the user choose which tracks to cut videos from."
 

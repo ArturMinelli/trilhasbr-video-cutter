@@ -28,6 +28,7 @@ type WorkspaceDetectionControlsProps = {
   progressHost: HTMLDivElement | null
   onDetectingChange: (detecting: boolean) => void
   onSettled: () => void
+  onCompleted: () => void
 }
 
 const WorkspaceDetectionControls = ({
@@ -35,8 +36,9 @@ const WorkspaceDetectionControls = ({
   progressHost,
   onDetectingChange,
   onSettled,
+  onCompleted,
 }: WorkspaceDetectionControlsProps) => {
-  const detection = useDetection(workspaceId, onSettled)
+  const detection = useDetection(workspaceId, onSettled, onCompleted)
   const isDetecting = detection.state.status === 'starting' || detection.state.status === 'running'
 
   useEffect(() => {
@@ -96,6 +98,11 @@ export const WorkspaceDetailPage = () => {
   const onDetectionSettled = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['people', workspaceId] })
   }, [queryClient, workspaceId])
+
+  const onDetectionCompleted = useCallback(() => {
+    onDetectionSettled()
+    setView('people')
+  }, [onDetectionSettled])
 
   const handleDetectingChange = useCallback((detecting: boolean) => {
     setIsDetecting(detecting)
@@ -443,6 +450,7 @@ export const WorkspaceDetailPage = () => {
             progressHost={progressHost}
             onDetectingChange={handleDetectingChange}
             onSettled={onDetectionSettled}
+            onCompleted={onDetectionCompleted}
           />
           <RefreshWorkspaceButton workspaceId={workspaceId} disabled={isDetecting} />
           <Button variant="secondary" onClick={() => setIsDeleteOpen(true)} disabled={isDetecting}>

@@ -10,13 +10,15 @@ Responses use the existing `{ ..., error? }` envelope (field names below are the
 | `ListPeople` | `{ workspaceId, minDurationSec?, minConfidence?, page, pageSize }` | `{ items, total, error? }` |
 | `MergePeople` | `groupIds: number[]` | `{ group?: { id }, error? }` (id-only group) |
 | `SplitPerson` | `groupId, trackId` | `{ group?: { id }, error? }` (id-only group) |
-| `RemoveTrack` | `{ trackId }` | `ActionResponse` |
-| `StartPeopleCut` | `{ workspaceId, groupIds, name, secondsBefore, secondsAfter }` | `{ jobId }` (reuses cut job + `cut:*` events) |
+| `RemoveTrack` | `trackId` | `ActionResponse` |
+| `RenamePerson` | `groupId, label` | `ActionResponse` |
+| `GetVideoTrackBoxes` | `videoId` | `{ tracks, error? }` (normalized boxes for overlay) |
+| `StartPeopleCut` | `{ workspaceId, groupIds, name, secondsBefore, secondsAfter }` | `{ jobId?, error? }` (reuses cut job + `cut:*` events) |
 
-`PersonGroupDTO`: `{ id, thumbnailDataUrl, startSec?, trackCount, videoCount, totalDurationSec, avgConfidence, tracks: [{ id, videoId, videoName, startSec, endSec }] }`.
+`PersonGroupDTO`: `{ id, label?, thumbnailDataUrl, startSec?, trackCount, videoCount, totalDurationSec, avgConfidence, tracks: [{ id, videoId, videoName, startSec, endSec }] }`.
 
 ## Events
-`detect:progress {jobId, videosTotal, videosDone, currentVideo, tracksFound}`, `detect:finished {jobId, tracksFound, elapsedMs}`, `detect:failed {jobId, error}`.
+`detect:progress {jobId, videosTotal, videosDone, currentVideo, tracksFound, queue?, videoId?, videoName?, videoStatus?, percent?}`, `detect:finished {jobId, tracksFound, elapsedMs}`, `detect:failed {jobId, error}`.
 
 ## Error codes (additions)
 `MODEL_NOT_FOUND`, `INFERENCE_ERROR`, `DETECTION_ERROR`.

@@ -105,7 +105,7 @@ description: "Task list for Detect People and Cut by Track"
 - [X] T036 [P] Add a gated smoke test `internal/inference/smoke_test.go` (skips if models are missing): ≥1 person on a fixture frame, 512-d unit-norm embedding
 - [X] T037 Run the throughput check from `quickstart.md` step 3 on a 10-minute sample; record fps and CoreML-vs-CPU in `specs/001-detect-people-tracks/research.md`, and adjust default workers/fps if SC-002 is missed
 - [X] T038 Run `go test ./...` and `cd frontend && npm run build`; fix failures
-- [ ] T039 Walk through `quickstart.md` steps 5–7 in `wails dev` and fix gaps; update `README.md` features and structure sections
+- [X] T039 Walk through `quickstart.md` steps 5–7 in `wails dev` and fix gaps; update `README.md` features and structure sections
 - [X] T040 Make `ReplaceWorkspaceVideos` in `internal/repository/sqlite/video_repo.go` upsert by path and delete only vanished videos, so re-importing a folder keeps video IDs and therefore detection results (found during implementation; test in `video_repo_test.go`)
 
 ---
