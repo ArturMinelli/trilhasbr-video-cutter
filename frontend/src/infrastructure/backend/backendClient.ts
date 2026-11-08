@@ -11,6 +11,8 @@ import type {
   DetectFinishedEvent,
   DetectProgressEvent,
   DetectionJobResponse,
+  ListPeopleIDsRequest,
+  ListPeopleIDsResponse,
   ListPeopleRequest,
   ListPeopleResponse,
   ListWorkspacesResponse,
@@ -51,6 +53,7 @@ export interface BackendClient {
   cancelDetection(jobId: string): Promise<ActionResponse>
   getDetectionJob(jobId: string): Promise<DetectionJobResponse>
   listPeople(request: ListPeopleRequest): Promise<ListPeopleResponse>
+  listPeopleIDs(request: ListPeopleIDsRequest): Promise<ListPeopleIDsResponse>
   mergePeople(groupIds: number[]): Promise<PersonGroupResponse>
   splitPerson(groupId: number, trackId: number): Promise<PersonGroupResponse>
   removeTrack(trackId: number): Promise<ActionResponse>

@@ -339,12 +339,61 @@ export namespace wailsapi {
 	        this.reason = source["reason"];
 	    }
 	}
+	export class ListPeopleIDsRequest {
+	    workspaceId: number;
+	    minDurationSec: number;
+	    minConfidence: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListPeopleIDsRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.workspaceId = source["workspaceId"];
+	        this.minDurationSec = source["minDurationSec"];
+	        this.minConfidence = source["minConfidence"];
+	    }
+	}
+	export class ListPeopleIDsResponse {
+	    ids: number[];
+	    error?: apperrors.PublicError;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListPeopleIDsResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ids = source["ids"];
+	        this.error = this.convertValues(source["error"], apperrors.PublicError);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ListPeopleRequest {
 	    workspaceId: number;
 	    minDurationSec: number;
 	    minConfidence: number;
 	    page: number;
 	    pageSize: number;
+	    sort: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ListPeopleRequest(source);
@@ -357,6 +406,7 @@ export namespace wailsapi {
 	        this.minConfidence = source["minConfidence"];
 	        this.page = source["page"];
 	        this.pageSize = source["pageSize"];
+	        this.sort = source["sort"];
 	    }
 	}
 	export class PersonTrackDTO {

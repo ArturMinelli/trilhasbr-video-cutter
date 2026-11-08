@@ -74,6 +74,10 @@ func (r *namesRepo) ListGroups(context.Context, domain.GroupFilter) ([]domain.Pe
 	return []domain.PersonGroup{{ID: 1, Label: "Ana"}, {ID: 2}}, 2, nil
 }
 
+func (r *namesRepo) ListGroupIDs(context.Context, domain.GroupFilter) ([]int64, error) {
+	return nil, nil
+}
+
 func (r *namesRepo) SetGroupLabel(_ context.Context, groupID int64, label string) error {
 	r.renamed = append(r.renamed, label)
 	return nil

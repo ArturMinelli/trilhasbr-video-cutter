@@ -162,6 +162,13 @@ func (a *App) ListPeople(request wailsapi.ListPeopleRequest) wailsapi.ListPeople
 	return a.service.ListPeople(request)
 }
 
+func (a *App) ListPeopleIDs(request wailsapi.ListPeopleIDsRequest) wailsapi.ListPeopleIDsResponse {
+	if a.initErr != nil {
+		return wailsapi.ListPeopleIDsResponse{IDs: []int64{}, Error: appError(a.initErr)}
+	}
+	return a.service.ListPeopleIDs(request)
+}
+
 func (a *App) MergePeople(groupIDs []int64) wailsapi.PersonGroupResponse {
 	if a.initErr != nil {
 		return wailsapi.PersonGroupResponse{Error: appError(a.initErr)}

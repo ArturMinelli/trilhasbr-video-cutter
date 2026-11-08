@@ -107,6 +107,39 @@ func TestDetectionRepository_ReplaceAndCascade(t *testing.T) {
 	}
 }
 
+func TestListGroupIDs(t *testing.T) {
+	ctx, _, repo, wsID, videos := setupDetection(t)
+	if _, err := repo.ReplaceTracksForVideo(ctx, videos[0].ID, []domain.Track{
+		{StartSec: 0, EndSec: 10, AvgConfidence: 0.9, DetectionCount: 10},
+		{StartSec: 20, EndSec: 20.4, AvgConfidence: 0.9, DetectionCount: 5},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ReplaceTracksForVideo(ctx, videos[1].ID, []domain.Track{
+		{StartSec: 1, EndSec: 11, AvgConfidence: 0.8, DetectionCount: 10},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	groups, _, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: wsID})
+	if err != nil || len(groups) != 3 {
+		t.Fatalf("setup groups: %v len=%d", err, len(groups))
+	}
+	shortID := groups[1].ID
+
+	ids, err := repo.ListGroupIDs(ctx, domain.GroupFilter{WorkspaceID: wsID, MinDurationSec: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 2 || ids[0] >= ids[1] {
+		t.Fatalf("want 2 ids in order, got %v", ids)
+	}
+	for _, id := range ids {
+		if id == shortID {
+			t.Fatalf("short group %d must be absent", shortID)
+		}
+	}
+}
+
 func TestDetectionRepository_MergeSplitRemoveFilters(t *testing.T) {
 	ctx, db, repo, wsID, videos := setupDetection(t)
 	if _, err := repo.ReplaceTracksForVideo(ctx, videos[0].ID, []domain.Track{
@@ -375,5 +408,71 @@ func TestListGroupsFiltersSelectedIDs(t *testing.T) {
 	other, total, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspace + 999, GroupIDs: []int64{groups[1].ID}})
 	if err != nil || total != 0 || len(other) != 0 {
 		t.Fatalf("unexpected cross-workspace result: %v %d %v", other, total, err)
+	}
+}
+
+func TestListGroupsSort(t *testing.T) {
+	ctx, _, repo, workspaceID, videos := setupDetection(t)
+	tracks := []domain.Track{
+		{StartSec: 0, EndSec: 2, AvgConfidence: 0.9, DetectionCount: 1},
+		{StartSec: 10, EndSec: 40, AvgConfidence: 0.9, DetectionCount: 1},
+	}
+	if _, err := repo.ReplaceTracksForVideo(ctx, videos[0].ID, tracks); err != nil {
+		t.Fatal(err)
+	}
+	shortFirst := func(sort string) int64 {
+		groups, _, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspaceID, Sort: sort})
+		if err != nil || len(groups) != 2 {
+			t.Fatalf("sort=%q: %v len=%d", sort, err, len(groups))
+		}
+		if groups[0].TotalDurationSec > groups[1].TotalDurationSec {
+			t.Fatalf("sort=%q: short group should be first", sort)
+		}
+		return groups[1].ID
+	}
+	longID := shortFirst("")
+	shortFirst("id")
+	groups, total, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspaceID, Sort: "duration"})
+	if err != nil || total != 2 || len(groups) != 2 || groups[0].ID != longID {
+		t.Fatalf("duration sort: %+v total=%d err=%v", groups, total, err)
+	}
+	page, total, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspaceID, Sort: "duration", Page: 1, PageSize: 1})
+	if err != nil || total != 2 || len(page) != 1 || page[0].ID != longID {
+		t.Fatalf("duration page: %+v total=%d err=%v", page, total, err)
+	}
+}
+
+func TestListGroupsPageTwo(t *testing.T) {
+	ctx, _, repo, workspaceID, videos := setupDetection(t)
+	tracks := make([]domain.Track, 6)
+	for index := range tracks {
+		start := float64(index * 10)
+		tracks[index] = domain.Track{StartSec: start, EndSec: start + 5, AvgConfidence: 0.9, DetectionCount: 1}
+	}
+	tracks[2].EndSec = tracks[2].StartSec + 0.4
+	if _, err := repo.ReplaceTracksForVideo(ctx, videos[0].ID, tracks); err != nil {
+		t.Fatal(err)
+	}
+	all, _, err := repo.ListGroups(ctx, domain.GroupFilter{WorkspaceID: workspaceID})
+	if err != nil || len(all) != 6 {
+		t.Fatalf("seed groups: %v len=%d", err, len(all))
+	}
+	shortGroupID := all[2].ID
+	pageGroups, total, err := repo.ListGroups(ctx, domain.GroupFilter{
+		WorkspaceID: workspaceID, MinDurationSec: 1, Page: 2, PageSize: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 5 {
+		t.Fatalf("total=%d, want 5 (short group %d excluded)", total, shortGroupID)
+	}
+	if len(pageGroups) != 2 || pageGroups[0].ID != all[3].ID || pageGroups[1].ID != all[4].ID {
+		t.Fatalf("page 2 = %+v, want ids %d %d", pageGroups, all[3].ID, all[4].ID)
+	}
+	for _, group := range pageGroups {
+		if group.ID == shortGroupID {
+			t.Fatalf("short group %d on page 2", shortGroupID)
+		}
 	}
 }

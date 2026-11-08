@@ -278,11 +278,23 @@ export type ListPeopleRequest = {
   minConfidence?: number
   page: number
   pageSize: number
+  sort?: 'id' | 'duration'
 }
 
 export type ListPeopleResponse = {
   items?: PersonGroupDTO[]
   total: number
+  error?: AppError
+}
+
+export type ListPeopleIDsRequest = {
+  workspaceId: number
+  minDurationSec: number
+  minConfidence: number
+}
+
+export type ListPeopleIDsResponse = {
+  ids?: number[]
   error?: AppError
 }
 

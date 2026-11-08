@@ -38,6 +38,10 @@ export function ListPeople(arg1) {
   return window['go']['main']['App']['ListPeople'](arg1);
 }
 
+export function ListPeopleIDs(arg1) {
+  return window['go']['main']['App']['ListPeopleIDs'](arg1);
+}
+
 export function ListWorkspaces() {
   return window['go']['main']['App']['ListWorkspaces']();
 }

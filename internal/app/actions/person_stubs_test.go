@@ -2,8 +2,10 @@ package actions
 
 import (
 	"context"
+	"testing"
 	"time"
 
+	"trilhasbr-video-cutter/internal/apperrors"
 	"trilhasbr-video-cutter/internal/domain"
 )
 
@@ -78,6 +80,9 @@ func (s personDetectionStub) ListGroups(_ context.Context, filter domain.GroupFi
 	}
 	return groups, len(groups), nil
 }
+func (s personDetectionStub) ListGroupIDs(context.Context, domain.GroupFilter) ([]int64, error) {
+	return nil, nil
+}
 func (s personDetectionStub) MergeGroups(context.Context, []int64) (int64, error) { return 0, nil }
 func (s personDetectionStub) SplitTrack(context.Context, int64, int64) (int64, error) {
 	return 0, nil
@@ -86,3 +91,12 @@ func (s personDetectionStub) RemoveTrack(context.Context, int64) error          
 func (s personDetectionStub) SetGroupLabel(context.Context, int64, string) error { return nil }
 
 func (s personWorkspaceStub) Delete(context.Context, int64) error { return nil }
+
+func TestPersonListSortValidation(t *testing.T) {
+	_, _, err := (&PersonListAction{}).List(context.Background(), ListPeopleInput{
+		WorkspaceID: 1, Sort: "nope",
+	})
+	if appErr := apperrors.As(err); appErr == nil || appErr.Code != apperrors.CodeValidation {
+		t.Fatalf("want VALIDATION_ERROR, got %v", err)
+	}
+}

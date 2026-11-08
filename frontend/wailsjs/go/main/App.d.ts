@@ -20,6 +20,8 @@ export function GetWorkspaceVideos(arg1:number,arg2:number,arg3:number):Promise<
 
 export function ListPeople(arg1:wailsapi.ListPeopleRequest):Promise<wailsapi.ListPeopleResponse>;
 
+export function ListPeopleIDs(arg1:wailsapi.ListPeopleIDsRequest):Promise<wailsapi.ListPeopleIDsResponse>;
+
 export function ListWorkspaces():Promise<wailsapi.ListWorkspacesResponse>;
 
 export function LoadWorkspaceByDialog():Promise<wailsapi.LoadWorkspaceResponse>;

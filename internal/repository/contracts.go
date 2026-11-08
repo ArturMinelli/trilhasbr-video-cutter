@@ -37,6 +37,7 @@ type DetectionRepository interface {
 	// ListVideoTrackBoxes returns a video's visible tracks with their per-frame boxes (normalized 0..1), by start time.
 	ListVideoTrackBoxes(ctx context.Context, videoID int64) ([]domain.VideoTrackBoxes, error)
 	ListGroups(ctx context.Context, filter domain.GroupFilter) ([]domain.PersonGroup, int, error)
+	ListGroupIDs(ctx context.Context, filter domain.GroupFilter) ([]int64, error)
 	// MergeGroups moves all tracks into the lowest group ID and returns it (needs >= 2 existing groups of one workspace).
 	MergeGroups(ctx context.Context, groupIDs []int64) (int64, error)
 	// SplitTrack moves a track into a new group and returns the new group ID.

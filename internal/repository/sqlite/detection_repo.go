@@ -221,16 +221,8 @@ func (r *DetectionRepository) ListVideoTrackBoxes(ctx context.Context, videoID i
 	return out, nil
 }
 
-func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilter) ([]domain.PersonGroup, int, error) {
-	page, size := f.Page, f.PageSize
-	if page < 1 {
-		page = 1
-	}
-	if size < 1 {
-		size = 50
-	}
-
-	base := `
+func groupListSelectSQL(f domain.GroupFilter) (string, []any, error) {
+	sql := `
 		SELECT g.id AS id,
 		       COALESCE(g.label, '') AS label,
 		       SUM(t.end_sec - t.start_sec) AS dur,
@@ -243,20 +235,64 @@ func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilt
 	if len(f.GroupIDs) > 0 {
 		ids, err := json.Marshal(f.GroupIDs)
 		if err != nil {
-			return nil, 0, dbErr("failed to encode group ids", err)
+			return "", nil, dbErr("failed to encode group ids", err)
 		}
-		base += ` AND g.id IN (SELECT value FROM json_each(?))`
+		sql += ` AND g.id IN (SELECT value FROM json_each(?))`
 		args = append(args, string(ids))
 	}
-	base += ` GROUP BY g.id HAVING dur >= ? AND conf >= ?`
+	sql += ` GROUP BY g.id HAVING dur >= ? AND conf >= ?`
 	args = append(args, f.MinDurationSec, f.MinConfidence)
+	return sql, args, nil
+}
+
+func (r *DetectionRepository) ListGroupIDs(ctx context.Context, f domain.GroupFilter) ([]int64, error) {
+	base, args, err := groupListSelectSQL(f)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id FROM (`+base+`) ORDER BY id`, args...)
+	if err != nil {
+		return nil, dbErr("failed to list group ids", err)
+	}
+	defer rows.Close()
+	out := []int64{}
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			return nil, dbErr("failed to scan group id", err)
+		}
+		out = append(out, id)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, dbErr("failed to iterate group ids", err)
+	}
+	return out, nil
+}
+
+func (r *DetectionRepository) ListGroups(ctx context.Context, f domain.GroupFilter) ([]domain.PersonGroup, int, error) {
+	page, size := f.Page, f.PageSize
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 {
+		size = 50
+	}
+
+	base, args, err := groupListSelectSQL(f)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	var total int
 	if err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+base+`)`, args...).Scan(&total); err != nil {
 		return nil, 0, dbErr("failed to count groups", err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, base+` ORDER BY g.id LIMIT ? OFFSET ?`,
+	order := ` ORDER BY g.id`
+	if f.Sort == "duration" {
+		order = ` ORDER BY dur DESC, g.id`
+	}
+	rows, err := r.db.QueryContext(ctx, base+order+` LIMIT ? OFFSET ?`,
 		append(args, size, (page-1)*size)...)
 	if err != nil {
 		return nil, 0, dbErr("failed to list groups", err)

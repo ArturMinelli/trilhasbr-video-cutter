@@ -13,6 +13,8 @@ import type {
   DetectFinishedEvent,
   DetectProgressEvent,
   DetectionJobResponse,
+  ListPeopleIDsRequest,
+  ListPeopleIDsResponse,
   ListPeopleRequest,
   ListPeopleResponse,
   ListWorkspacesResponse,
@@ -53,6 +55,7 @@ type GoAppInvoker = {
   CancelDetection: (jobId: string) => Promise<ActionResponse>
   GetDetectionJob: (jobId: string) => Promise<DetectionJobResponse>
   ListPeople: (request: ListPeopleRequest) => Promise<ListPeopleResponse>
+  ListPeopleIDs: (request: ListPeopleIDsRequest) => Promise<ListPeopleIDsResponse>
   MergePeople: (groupIds: number[]) => Promise<PersonGroupResponse>
   SplitPerson: (groupId: number, trackId: number) => Promise<PersonGroupResponse>
   RemoveTrack: (trackId: number) => Promise<ActionResponse>
@@ -136,6 +139,10 @@ export class WailsBackendClient implements BackendClient {
 
   async listPeople(request: ListPeopleRequest): Promise<ListPeopleResponse> {
     return getGoApp().ListPeople(request)
+  }
+
+  async listPeopleIDs(request: ListPeopleIDsRequest): Promise<ListPeopleIDsResponse> {
+    return getGoApp().ListPeopleIDs(request)
   }
 
   async mergePeople(groupIds: number[]): Promise<PersonGroupResponse> {

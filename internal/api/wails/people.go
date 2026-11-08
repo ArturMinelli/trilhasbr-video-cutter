@@ -57,12 +57,24 @@ type ListPeopleRequest struct {
 	MinConfidence  float64 `json:"minConfidence"`
 	Page           int     `json:"page"`
 	PageSize       int     `json:"pageSize"`
+	Sort           string  `json:"sort"`
 }
 
 type ListPeopleResponse struct {
 	Items []PersonGroupDTO `json:"items,omitempty"`
 	Total int              `json:"total"`
 	Error *AppError        `json:"error,omitempty"`
+}
+
+type ListPeopleIDsRequest struct {
+	WorkspaceID    int64   `json:"workspaceId"`
+	MinDurationSec float64 `json:"minDurationSec"`
+	MinConfidence  float64 `json:"minConfidence"`
+}
+
+type ListPeopleIDsResponse struct {
+	IDs   []int64   `json:"ids"`
+	Error *AppError `json:"error,omitempty"`
 }
 
 type PersonGroupResponse struct {
@@ -189,7 +201,7 @@ func (s *Service) GetDetectionJob(jobID string) DetectionJobResponse {
 func (s *Service) ListPeople(request ListPeopleRequest) ListPeopleResponse {
 	groups, total, err := s.personList.List(s.getContext(), actions.ListPeopleInput{
 		WorkspaceID: request.WorkspaceID, MinDurationSec: request.MinDurationSec, MinConfidence: request.MinConfidence,
-		Page: request.Page, PageSize: request.PageSize,
+		Page: request.Page, PageSize: request.PageSize, Sort: request.Sort,
 	})
 	if err != nil {
 		return ListPeopleResponse{Error: apperrors.ToPublic(err)}
@@ -199,6 +211,19 @@ func (s *Service) ListPeople(request ListPeopleRequest) ListPeopleResponse {
 		items = append(items, toPersonGroupDTO(group))
 	}
 	return ListPeopleResponse{Items: items, Total: total}
+}
+
+func (s *Service) ListPeopleIDs(request ListPeopleIDsRequest) ListPeopleIDsResponse {
+	ids, err := s.personList.ListIDs(s.getContext(), actions.ListPeopleIDsInput{
+		WorkspaceID: request.WorkspaceID, MinDurationSec: request.MinDurationSec, MinConfidence: request.MinConfidence,
+	})
+	if err != nil {
+		return ListPeopleIDsResponse{IDs: []int64{}, Error: apperrors.ToPublic(err)}
+	}
+	if ids == nil {
+		ids = []int64{}
+	}
+	return ListPeopleIDsResponse{IDs: ids}
 }
 
 // MergePeople returns an id-only group: callers just need the merged group's id to select it.

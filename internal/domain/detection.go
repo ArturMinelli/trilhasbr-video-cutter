@@ -90,4 +90,5 @@ type GroupFilter struct {
 	MinConfidence  float64
 	Page           int // 1-based
 	PageSize       int
+	Sort           string
 }

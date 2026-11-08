@@ -19,6 +19,13 @@ type ListPeopleInput struct {
 	MinConfidence  float64 `json:"minConfidence"`
 	Page           int     `json:"page"`
 	PageSize       int     `json:"pageSize"`
+	Sort           string  `json:"sort"`
+}
+
+type ListPeopleIDsInput struct {
+	WorkspaceID    int64   `json:"workspaceId"`
+	MinDurationSec float64 `json:"minDurationSec"`
+	MinConfidence  float64 `json:"minConfidence"`
 }
 
 // PersonListAction lists and curates person groups (merge / split / remove).
@@ -28,11 +35,11 @@ type PersonListAction struct {
 
 // List returns groups (each track carries VideoName and ThumbnailPath) and the filtered total.
 func (a *PersonListAction) List(ctx context.Context, in ListPeopleInput) ([]domain.PersonGroup, int, error) {
-	if in.WorkspaceID <= 0 {
-		return nil, 0, apperrors.New(apperrors.CodeValidation, "workspaceId must be greater than 0", nil)
+	if err := validatePeopleListFilters(in.WorkspaceID, in.MinDurationSec, in.MinConfidence); err != nil {
+		return nil, 0, err
 	}
-	if in.MinDurationSec < 0 || in.MinConfidence < 0 || in.MinConfidence > 1 {
-		return nil, 0, apperrors.New(apperrors.CodeValidation, "minDurationSec must be >= 0 and minConfidence within 0..1", nil)
+	if err := validatePeopleListSort(in.Sort); err != nil {
+		return nil, 0, err
 	}
 	return a.Repo.ListGroups(ctx, domain.GroupFilter{
 		WorkspaceID:    in.WorkspaceID,
@@ -40,6 +47,36 @@ func (a *PersonListAction) List(ctx context.Context, in ListPeopleInput) ([]doma
 		MinConfidence:  in.MinConfidence,
 		Page:           in.Page,
 		PageSize:       in.PageSize,
+		Sort:           in.Sort,
+	})
+}
+
+func validatePeopleListFilters(workspaceID int64, minDurationSec, minConfidence float64) error {
+	if workspaceID <= 0 {
+		return apperrors.New(apperrors.CodeValidation, "workspaceId must be greater than 0", nil)
+	}
+	if minDurationSec < 0 || minConfidence < 0 || minConfidence > 1 {
+		return apperrors.New(apperrors.CodeValidation, "minDurationSec must be >= 0 and minConfidence within 0..1", nil)
+	}
+	return nil
+}
+
+func validatePeopleListSort(sort string) error {
+	if sort == "" || sort == "id" || sort == "duration" {
+		return nil
+	}
+	return apperrors.New(apperrors.CodeValidation, "sort must be id or duration", nil)
+}
+
+// ListIDs returns every person group id matching the filters (no pagination).
+func (a *PersonListAction) ListIDs(ctx context.Context, in ListPeopleIDsInput) ([]int64, error) {
+	if err := validatePeopleListFilters(in.WorkspaceID, in.MinDurationSec, in.MinConfidence); err != nil {
+		return nil, err
+	}
+	return a.Repo.ListGroupIDs(ctx, domain.GroupFilter{
+		WorkspaceID:    in.WorkspaceID,
+		MinDurationSec: in.MinDurationSec,
+		MinConfidence:  in.MinConfidence,
 	})
 }
 
